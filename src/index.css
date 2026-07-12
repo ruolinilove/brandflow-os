@@ -1,0 +1,13 @@
+@import "tailwindcss";
+
+:root { font-family: Inter, "Noto Sans SC", "Microsoft YaHei", sans-serif; color-scheme: light; }
+* { box-sizing: border-box; }
+html { background: #f2f6f2; }
+body { margin: 0; min-width: 320px; background: #f2f6f2; }
+button, input, textarea, select { font: inherit; letter-spacing: 0; }
+button { cursor: pointer; }
+.recharts-clean-focus, .recharts-clean-focus *, .recharts-clean-focus *:focus { outline: none !important; }
+::selection { background: #d7efca; color: #1f3d24; }
+::-webkit-scrollbar { width: 9px; height: 9px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: #cfdbd0; border: 3px solid #f2f6f2; border-radius: 999px; }
