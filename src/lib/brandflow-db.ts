@@ -19,6 +19,15 @@ export type MetricRow = {
   follower_growth: number
 }
 
+export type InviteRow = {
+  id: string
+  created_at: string
+  expires_at: string
+  max_uses: number
+  use_count: number
+  revoked_at: string | null
+}
+
 async function currentUserId() {
   const client = requireSupabase()
   const { data, error } = await client.auth.getUser()
@@ -39,6 +48,40 @@ export async function bootstrapBrandFlow() {
   if (core.error) throw core.error
   const modules = await client.rpc('bootstrap_brandflow_modules')
   if (modules.error) throw modules.error
+}
+
+export async function isBrandFlowAuthorized() {
+  const client = requireSupabase()
+  const { data, error } = await client.rpc('is_brandflow_authorized')
+  if (error) throw error
+  return data === true
+}
+
+export async function createBrandFlowInvite(validHours = 24, allowedUses = 1) {
+  const client = requireSupabase()
+  const { data, error } = await client.rpc('create_brandflow_invite', {
+    valid_hours: validHours,
+    allowed_uses: allowedUses,
+  })
+  if (error) throw error
+  const invite = data?.[0]
+  if (!invite) throw new Error('邀请码生成失败。')
+  return invite as { code: string; invite_id: string; expires_at: string }
+}
+
+export async function listBrandFlowInvites() {
+  const client = requireSupabase()
+  const { data, error } = await client
+    .from('brandflow_invites')
+    .select('id, created_at, expires_at, max_uses, use_count, revoked_at')
+    .order('created_at', { ascending: false })
+  return assertData(data as InviteRow[] | null, error)
+}
+
+export async function revokeBrandFlowInvite(id: string) {
+  const client = requireSupabase()
+  const { error } = await client.rpc('revoke_brandflow_invite', { target_id: id })
+  if (error) throw error
 }
 
 export async function loadCoreData() {

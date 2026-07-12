@@ -3,10 +3,10 @@ import { AnimatePresence, motion } from 'framer-motion'
 import type { Variants } from 'framer-motion'
 import type { Session } from '@supabase/supabase-js'
 import {
-  Activity, ArrowLeftRight, ArrowUpRight, Bell, CalendarDays, CheckCircle2,
+  Activity, ArrowLeftRight, ArrowUpRight, Bell, CalendarDays, CheckCircle2, Copy,
   ChevronDown, CircleDashed, Database, Download, FileChartColumn, FileText,
   Droplets, Flower2, FolderKanban, HardDrive, House, Images, LayoutDashboard,
-  Lightbulb, LogOut, Menu, MoreHorizontal, Play, Plus, Search, Settings, Share2,
+  KeyRound, Lightbulb, LogOut, Menu, MoreHorizontal, Play, Plus, Search, Settings, Share2,
   Sparkles, Sprout, Sun, Trash2, TrendingUp, Trophy, Upload, Users,
   WandSparkles, X,
 } from 'lucide-react'
@@ -16,9 +16,10 @@ import {
 } from 'recharts'
 import { isSupabaseConfigured, supabase } from './lib/supabase'
 import {
-  assetsDb, bootstrapBrandFlow, contentsDb, deleteMetric, ideasDb, loadCoreData,
-  loadGarden, plansDb, projectsDb, saveBrandName, saveGarden, saveMetric,
-  uploadAsset,
+  assetsDb, bootstrapBrandFlow, contentsDb, createBrandFlowInvite, deleteMetric,
+  ideasDb, isBrandFlowAuthorized, listBrandFlowInvites, loadCoreData, loadGarden,
+  plansDb, projectsDb, revokeBrandFlowInvite, saveBrandName, saveGarden, saveMetric,
+  uploadAsset, type InviteRow,
 } from './lib/brandflow-db'
 
 type BrandId = 'brandA' | 'brandB'
@@ -77,17 +78,24 @@ function AuthScreen(){
   const [mode,setMode]=useState<'signin'|'signup'>('signin')
   const [email,setEmail]=useState('')
   const [password,setPassword]=useState('')
+  const [inviteCode,setInviteCode]=useState('')
   const [loading,setLoading]=useState(false)
   const [message,setMessage]=useState('')
   const submit=async(event:React.FormEvent)=>{
     event.preventDefault();if(!supabase)return
     setLoading(true);setMessage('')
-    const result=mode==='signin'?await supabase.auth.signInWithPassword({email,password}):await supabase.auth.signUp({email,password})
+    const result=mode==='signin'
+      ?await supabase.auth.signInWithPassword({email,password})
+      :await supabase.auth.signUp({email,password,options:{data:{brandflow_invite_code:inviteCode}}})
     setLoading(false)
-    if(result.error){setMessage(result.error.message);return}
+    if(result.error){setMessage(result.error.message.includes('Database error')?'邀请码无效、已过期或已被使用。':result.error.message);return}
     if(mode==='signup'&&!result.data.session)setMessage('注册成功，请前往邮箱确认后再登录。')
   }
-  return <div className="relative grid min-h-screen place-items-center overflow-hidden bg-[#eaf2e7] p-4"><img src="/assets/project-home.jpg" alt="创艺装饰空间" className="absolute inset-0 h-full w-full object-cover opacity-25"/><div className="absolute inset-0 bg-white/60 backdrop-blur-sm"/><motion.main initial={{opacity:0,y:18}} animate={{opacity:1,y:0}} className="relative w-full max-w-md rounded-3xl border border-white bg-white/95 p-6 shadow-[0_30px_90px_rgba(42,70,52,0.18)] sm:p-8"><div className="flex items-center gap-3"><span className="grid size-12 place-items-center rounded-2xl bg-[#9ad66f] text-lg font-black text-white shadow-lg shadow-lime-200">B</span><div><h1 className="text-xl font-semibold">BrandFlow OS</h1><p className="mt-1 text-xs text-slate-400">品牌数据中心</p></div></div><div className="mt-8 flex rounded-2xl bg-[#f3f7f1] p-1">{([['signin','登录'],['signup','注册']] as const).map(([id,label])=><button type="button" key={id} onClick={()=>{setMode(id);setMessage('')}} className={`h-10 flex-1 rounded-xl text-sm font-semibold transition ${mode===id?'bg-white text-[#4f8248] shadow-sm':'text-slate-400'}`}>{label}</button>)}</div><form onSubmit={submit} className="mt-6 space-y-4"><Field label="邮箱"><input type="email" required autoComplete="email" value={email} onChange={e=>setEmail(e.target.value)} placeholder="name@example.com"/></Field><Field label="密码"><input type="password" required minLength={6} autoComplete={mode==='signin'?'current-password':'new-password'} value={password} onChange={e=>setPassword(e.target.value)} placeholder="至少 6 位密码"/></Field>{message&&<p className={`rounded-2xl px-4 py-3 text-xs leading-5 ${message.includes('成功')?'bg-emerald-50 text-emerald-700':'bg-rose-50 text-rose-600'}`}>{message}</p>}<SubmitButton label={loading?'请稍候...':mode==='signin'?'登录数据中心':'创建账号'}/></form></motion.main></div>
+  return <div className="relative grid min-h-screen place-items-center overflow-hidden bg-[#eaf2e7] p-4"><img src="/assets/project-home.jpg" alt="创艺装饰空间" className="absolute inset-0 h-full w-full object-cover opacity-25"/><div className="absolute inset-0 bg-white/60 backdrop-blur-sm"/><motion.main initial={{opacity:0,y:18}} animate={{opacity:1,y:0}} className="relative w-full max-w-md rounded-3xl border border-white bg-white/95 p-6 shadow-[0_30px_90px_rgba(42,70,52,0.18)] sm:p-8"><div className="flex items-center gap-3"><span className="grid size-12 place-items-center rounded-2xl bg-[#9ad66f] text-lg font-black text-white shadow-lg shadow-lime-200">B</span><div><h1 className="text-xl font-semibold">BrandFlow OS</h1><p className="mt-1 text-xs text-slate-400">品牌数据中心</p></div></div><div className="mt-8 flex rounded-2xl bg-[#f3f7f1] p-1">{([['signin','登录'],['signup','注册']] as const).map(([id,label])=><button type="button" key={id} onClick={()=>{setMode(id);setMessage('')}} className={`h-10 flex-1 rounded-xl text-sm font-semibold transition ${mode===id?'bg-white text-[#4f8248] shadow-sm':'text-slate-400'}`}>{label}</button>)}</div><form onSubmit={submit} className="mt-6 space-y-4"><Field label="邮箱"><input type="email" required autoComplete="email" value={email} onChange={e=>setEmail(e.target.value)} placeholder="name@example.com"/></Field><Field label="密码"><input type="password" required minLength={6} autoComplete={mode==='signin'?'current-password':'new-password'} value={password} onChange={e=>setPassword(e.target.value)} placeholder="至少 6 位密码"/></Field>{mode==='signup'&&<Field label="六位邀请码"><div className="relative"><KeyRound size={17} className="absolute left-4 top-1/2 -translate-y-1/2 text-[#79a96a]"/><input inputMode="numeric" pattern="[0-9]{6}" maxLength={6} autoComplete="one-time-code" value={inviteCode} onChange={e=>setInviteCode(e.target.value.replace(/\D/g,'').slice(0,6))} placeholder="首次安装可留空，其他用户需填写" className="pl-11"/></div></Field>}{message&&<p className={`rounded-2xl px-4 py-3 text-xs leading-5 ${message.includes('成功')?'bg-emerald-50 text-emerald-700':'bg-rose-50 text-rose-600'}`}>{message}</p>}<SubmitButton label={loading?'请稍候...':mode==='signin'?'登录数据中心':'使用邀请码注册'}/></form></motion.main></div>
+}
+
+function AccessDenied(){
+  return <div className="grid min-h-screen place-items-center bg-[#f2f6f2] p-4"><motion.div initial={{opacity:0,y:14}} animate={{opacity:1,y:0}} className={`${cardClass} w-full max-w-md p-8 text-center`}><span className="mx-auto grid size-14 place-items-center rounded-2xl bg-amber-50 text-amber-600"><KeyRound size={24}/></span><h1 className="mt-5 text-xl font-semibold">账号尚未获得访问授权</h1><p className="mt-2 text-sm leading-6 text-slate-500">该账号不是通过有效邀请码注册的，无法进入 BrandFlow 数据中心。</p><button onClick={()=>supabase?.auth.signOut()} className="mt-6 h-11 rounded-2xl bg-[#8dcc65] px-6 text-sm font-semibold text-white">退出并更换账号</button></motion.div></div>
 }
 
 function App(){
@@ -96,6 +104,7 @@ function App(){
   const [search,setSearch]=useState('')
   const [session,setSession]=useState<Session|null>(null)
   const [authLoading,setAuthLoading]=useState(isSupabaseConfigured)
+  const [accessState,setAccessState]=useState<'checking'|'granted'|'denied'>(isSupabaseConfigured?'checking':'granted')
   const [dataLoading,setDataLoading]=useState(false)
   const [cloudError,setCloudError]=useState('')
   const [entries,setEntries]=useState<MetricEntry[]>(()=>{try{return JSON.parse(localStorage.getItem('brandflow-metrics')||'null')||defaultEntries}catch{return defaultEntries}})
@@ -105,8 +114,8 @@ function App(){
 
   useEffect(()=>{
     if(!supabase){setAuthLoading(false);return}
-    supabase.auth.getSession().then(({data})=>{setSession(data.session);setAuthLoading(false)})
-    const {data:{subscription}}=supabase.auth.onAuthStateChange((_event,nextSession)=>{setSession(nextSession);setAuthLoading(false)})
+    supabase.auth.getSession().then(({data})=>{setSession(data.session);setAccessState(data.session?'checking':'denied');setAuthLoading(false)})
+    const {data:{subscription}}=supabase.auth.onAuthStateChange((_event,nextSession)=>{setSession(nextSession);setAccessState(nextSession?'checking':'denied');setAuthLoading(false)})
     return ()=>subscription.unsubscribe()
   },[])
 
@@ -116,13 +125,16 @@ function App(){
     setDataLoading(true);setCloudError('')
     ;(async()=>{
       try{
+        setAccessState('checking')
+        if(!await isBrandFlowAuthorized()){if(active)setAccessState('denied');return}
+        if(active)setAccessState('granted')
         await bootstrapBrandFlow()
         const core=await loadCoreData()
         if(!active)return
         const brandById=new Map(core.brands.map(brand=>[brand.id,brand.code]))
         setBrands(core.brands.reduce((result,brand)=>({...result,[brand.code]:brand.name}),defaultBrands))
         setEntries(core.metrics.map(metric=>({id:String(metric.id),date:metric.metric_date,brand:brandById.get(metric.brand_id)||'brandA',views:Number(metric.views),shares:Number(metric.shares),followers:Number(metric.follower_growth)})))
-      }catch(error){if(active)setCloudError(error instanceof Error?error.message:'云端数据加载失败')}
+      }catch(error){if(active){setAccessState('denied');setCloudError(error instanceof Error?error.message:'云端数据加载失败')}}
       finally{if(active)setDataLoading(false)}
     })()
     return ()=>{active=false}
@@ -151,6 +163,8 @@ function App(){
 
   if(authLoading)return <LoadingScreen label="正在连接品牌数据中心..."/>
   if(isSupabaseConfigured&&!session)return <AuthScreen/>
+  if(isSupabaseConfigured&&accessState==='checking')return <LoadingScreen label="正在验证访问权限..."/>
+  if(isSupabaseConfigured&&accessState==='denied')return <AccessDenied/>
 
   return <div className="min-h-screen bg-[#f2f6f2] text-slate-950 antialiased">
     <Sidebar page={page} setPage={setPage} open={menuOpen} setOpen={setMenuOpen}/>
@@ -415,8 +429,19 @@ function AiPage(){const [text,setText]=useState('');return <><PageHead eyebrow="
 
 function SettingsPage({brands,setBrands,onSave}:{brands:BrandConfig;setBrands:(b:BrandConfig)=>void;onSave:(b:BrandConfig)=>Promise<void>}){
   const [status,setStatus]=useState('')
+  const [invites,setInvites]=useState<InviteRow[]>([])
+  const [inviteHours,setInviteHours]=useState(24)
+  const [inviteUses,setInviteUses]=useState(1)
+  const [generatedCode,setGeneratedCode]=useState('')
+  const [inviteStatus,setInviteStatus]=useState('')
+  const loadInvites=async()=>{if(!isSupabaseConfigured)return;try{setInvites(await listBrandFlowInvites())}catch(error){setInviteStatus(error instanceof Error?error.message:'邀请码加载失败')}}
+  useEffect(()=>{loadInvites()},[])
   const save=async()=>{setStatus('正在保存...');try{await onSave(brands);setStatus('已同步到云端')}catch(error){setStatus(error instanceof Error?error.message:'保存失败')}}
-  return <><PageHead eyebrow="Settings" title="品牌与账号设置" desc="配置两个品牌名称和个人工作空间。"/><motion.div variants={gridMotion} initial="hidden" animate="show" className="grid gap-4 lg:grid-cols-[.65fr_1.35fr]"><Card className="p-6"><h2 className="font-semibold">个人资料</h2><div className="mt-6 flex items-center gap-4"><span className="grid size-16 place-items-center rounded-full bg-[#dff2d6] text-lg font-bold text-[#528644]">CY</span><div><b className="block">创艺运营</b><span className="text-xs text-slate-400">品牌内容负责人</span></div></div></Card><Card className="p-6"><h2 className="font-semibold">品牌名称</h2><p className="mt-1 text-xs text-slate-400">修改名称不会影响历史数据。</p><div className="mt-6 grid gap-4 sm:grid-cols-2"><Field label="创艺装饰"><input value={brands.brandA} onChange={e=>setBrands({...brands,brandA:e.target.value})}/></Field><Field label="喜客喜装饰"><input value={brands.brandB} onChange={e=>setBrands({...brands,brandB:e.target.value})}/></Field></div><div className="mt-6 flex items-center gap-3"><motion.button onClick={save} whileHover={{scale:1.02}} className="h-11 rounded-2xl bg-[#8dcc65] px-5 text-sm font-semibold text-white">保存设置</motion.button>{status&&<span className="text-xs text-slate-400">{status}</span>}</div></Card></motion.div></>
+  const generateInvite=async()=>{setInviteStatus('正在生成...');setGeneratedCode('');try{const result=await createBrandFlowInvite(inviteHours,inviteUses);setGeneratedCode(result.code);setInviteStatus('邀请码已生成，仅在这里显示一次');await loadInvites()}catch(error){setInviteStatus(error instanceof Error?error.message:'邀请码生成失败')}}
+  const copyInvite=async()=>{if(!generatedCode)return;await navigator.clipboard.writeText(generatedCode);setInviteStatus('邀请码已复制')}
+  const revokeInvite=async(id:string)=>{if(!window.confirm('确定撤销这个邀请码吗？撤销后将无法用于注册。'))return;try{await revokeBrandFlowInvite(id);setInviteStatus('邀请码已撤销');await loadInvites()}catch(error){setInviteStatus(error instanceof Error?error.message:'撤销失败')}}
+  const inviteLabel=(invite:InviteRow)=>invite.revoked_at?'已撤销':invite.use_count>=invite.max_uses?'已用完':new Date(invite.expires_at)<=new Date()?'已过期':'可使用'
+  return <><PageHead eyebrow="Settings" title="品牌与账号设置" desc="配置两个品牌名称、个人工作空间和访问权限。"/><motion.div variants={gridMotion} initial="hidden" animate="show" className="grid gap-4 lg:grid-cols-[.65fr_1.35fr]"><Card className="p-6"><h2 className="font-semibold">个人资料</h2><div className="mt-6 flex items-center gap-4"><span className="grid size-16 place-items-center rounded-full bg-[#dff2d6] text-lg font-bold text-[#528644]">CY</span><div><b className="block">创艺运营</b><span className="text-xs text-slate-400">品牌内容负责人</span></div></div></Card><Card className="p-6"><h2 className="font-semibold">品牌名称</h2><p className="mt-1 text-xs text-slate-400">修改名称不会影响历史数据。</p><div className="mt-6 grid gap-4 sm:grid-cols-2"><Field label="创艺装饰"><input value={brands.brandA} onChange={e=>setBrands({...brands,brandA:e.target.value})}/></Field><Field label="喜客喜装饰"><input value={brands.brandB} onChange={e=>setBrands({...brands,brandB:e.target.value})}/></Field></div><div className="mt-6 flex items-center gap-3"><motion.button onClick={save} whileHover={{scale:1.02}} className="h-11 rounded-2xl bg-[#8dcc65] px-5 text-sm font-semibold text-white">保存设置</motion.button>{status&&<span className="text-xs text-slate-400">{status}</span>}</div></Card><Card className="p-6 lg:col-span-2"><div className="flex items-start gap-3"><span className="grid size-11 shrink-0 place-items-center rounded-2xl bg-emerald-50 text-emerald-600"><KeyRound size={20}/></span><div><h2 className="font-semibold">注册邀请码</h2><p className="mt-1 text-xs text-slate-400">邀请新成员加入。原码不会存储，生成后只显示一次。</p></div></div><div className="mt-6 grid gap-4 sm:grid-cols-[1fr_1fr_auto]"><Field label="有效时间"><select value={inviteHours} onChange={e=>setInviteHours(Number(e.target.value))}><option value={24}>24 小时</option><option value={72}>3 天</option><option value={168}>7 天</option></select></Field><Field label="可使用次数"><select value={inviteUses} onChange={e=>setInviteUses(Number(e.target.value))}><option value={1}>1 次</option><option value={3}>3 次</option><option value={5}>5 次</option></select></Field><motion.button onClick={generateInvite} whileHover={{y:-2}} whileTap={{scale:.98}} className="mt-auto flex h-11 items-center justify-center gap-2 rounded-2xl bg-[#8dcc65] px-5 text-sm font-semibold text-white"><Plus size={17}/>生成邀请码</motion.button></div>{generatedCode&&<motion.div initial={{opacity:0,y:8}} animate={{opacity:1,y:0}} className="mt-5 flex flex-col gap-3 rounded-2xl border border-emerald-100 bg-[#f4faf1] p-4 sm:flex-row sm:items-center"><div className="flex flex-1 justify-center gap-2 sm:justify-start">{generatedCode.split('').map((digit,index)=><span key={`${digit}-${index}`} className="grid size-10 place-items-center rounded-xl bg-white text-lg font-semibold text-[#3f7341] shadow-sm">{digit}</span>)}</div><button onClick={copyInvite} className="flex h-10 items-center justify-center gap-2 rounded-xl bg-white px-4 text-xs font-semibold text-[#4f8248] shadow-sm"><Copy size={15}/>复制</button></motion.div>}{inviteStatus&&<p className="mt-3 text-xs text-slate-400">{inviteStatus}</p>}<div className="mt-6 overflow-x-auto"><table className="w-full min-w-[620px] text-left"><thead className="text-[11px] text-slate-400"><tr><th className="pb-3 font-medium">创建时间</th><th className="pb-3 font-medium">有效期至</th><th className="pb-3 font-medium">使用情况</th><th className="pb-3 font-medium">状态</th><th className="pb-3 text-right font-medium">操作</th></tr></thead><tbody>{invites.map(invite=><tr key={invite.id} className="border-t border-slate-100 text-sm"><td className="py-3 text-slate-500">{new Date(invite.created_at).toLocaleString('zh-CN',{month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit'})}</td><td className="py-3 text-slate-500">{new Date(invite.expires_at).toLocaleString('zh-CN',{month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit'})}</td><td className="py-3">{invite.use_count} / {invite.max_uses}</td><td className="py-3"><span className={`rounded-full px-2.5 py-1 text-[11px] font-semibold ${inviteLabel(invite)==='可使用'?'bg-emerald-50 text-emerald-700':'bg-slate-100 text-slate-500'}`}>{inviteLabel(invite)}</span></td><td className="py-3 text-right"><button disabled={inviteLabel(invite)!=='可使用'} onClick={()=>revokeInvite(invite.id)} className="rounded-xl px-3 py-1.5 text-xs font-medium text-rose-500 transition hover:bg-rose-50 disabled:cursor-not-allowed disabled:opacity-30">撤销</button></td></tr>)}</tbody></table>{!invites.length&&<div className="border-t border-slate-100 py-8 text-center text-xs text-slate-400">还没有生成过邀请码</div>}</div></Card></motion.div></>
 }
 
 export default App
