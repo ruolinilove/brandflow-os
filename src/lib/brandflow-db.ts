@@ -57,6 +57,13 @@ export async function isBrandFlowAuthorized() {
   return data === true
 }
 
+export async function getBrandFlowAccessRole() {
+  const client = requireSupabase()
+  const { data, error } = await client.rpc('get_brandflow_access_role')
+  if (error) throw error
+  return data === 'super_admin' ? 'super_admin' : 'member'
+}
+
 export async function createBrandFlowInvite(validHours = 24, allowedUses = 1) {
   const client = requireSupabase()
   const { data, error } = await client.rpc('create_brandflow_invite', {

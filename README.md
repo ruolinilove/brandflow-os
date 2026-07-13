@@ -62,15 +62,16 @@ VITE_SUPABASE_ANON_KEY=your-publishable-or-anon-key
 2. `supabase/migrations/202607120002_seed_modules.sql`
 3. `supabase/migrations/202607120003_invite_access.sql`
 4. `supabase/migrations/202607120004_first_owner_bootstrap.sql`
+5. `supabase/migrations/202607130001_super_admin_role.sql`
 
 这些迁移会创建业务表、模块初始化函数、私有素材桶和邀请制访问策略。
 
 ### 邀请制注册
 
 - 已存在的 Auth 用户会自动保留访问权限。
-- 全新项目的第一个注册账号可不填邀请码，并会成为初始管理员。
+- 全新项目的第一个注册账号可不填邀请码，并会成为超级管理员。
 - 后续账号必须使用有效的六位邀请码注册。
-- 管理员可在“设置 > 注册邀请码”生成、查看状态和撤销邀请码。
+- 只有超级管理员可在“设置 > 注册邀请码”生成、查看状态和撤销邀请码。
 - 邀请码仅以 SHA-256 哈希保存，可设置有效期和使用次数。
 
 公开部署前请保持邮箱确认开启，并建议在 Supabase Auth 中启用 CAPTCHA。

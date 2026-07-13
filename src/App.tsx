@@ -7,7 +7,7 @@ import {
   ChevronDown, CircleDashed, Database, Download, FileChartColumn, FileText,
   Droplets, Flower2, FolderKanban, HardDrive, House, Images, LayoutDashboard,
   KeyRound, Lightbulb, LogOut, Menu, MoreHorizontal, Play, Plus, Search, Settings, Share2,
-  Sparkles, Sprout, Sun, Trash2, TrendingUp, Trophy, Upload, Users,
+  ShieldCheck, Sparkles, Sprout, Sun, Trash2, TrendingUp, Trophy, Upload, Users,
   WandSparkles, X,
 } from 'lucide-react'
 import {
@@ -17,7 +17,7 @@ import {
 import { isSupabaseConfigured, supabase } from './lib/supabase'
 import {
   assetsDb, bootstrapBrandFlow, contentsDb, createBrandFlowInvite, deleteMetric,
-  ideasDb, isBrandFlowAuthorized, listBrandFlowInvites, loadCoreData, loadGarden,
+  getBrandFlowAccessRole, ideasDb, isBrandFlowAuthorized, listBrandFlowInvites, loadCoreData, loadGarden,
   plansDb, projectsDb, revokeBrandFlowInvite, saveBrandName, saveGarden, saveMetric,
   uploadAsset, type InviteRow,
 } from './lib/brandflow-db'
@@ -91,7 +91,7 @@ function AuthScreen(){
     if(result.error){setMessage(result.error.message.includes('Database error')?'邀请码无效、已过期或已被使用。':result.error.message);return}
     if(mode==='signup'&&!result.data.session)setMessage('注册成功，请前往邮箱确认后再登录。')
   }
-  return <div className="relative grid min-h-screen place-items-center overflow-hidden bg-[#eaf2e7] p-4"><img src="/assets/project-home.jpg" alt="创艺装饰空间" className="absolute inset-0 h-full w-full object-cover opacity-25"/><div className="absolute inset-0 bg-white/60 backdrop-blur-sm"/><motion.main initial={{opacity:0,y:18}} animate={{opacity:1,y:0}} className="relative w-full max-w-md rounded-3xl border border-white bg-white/95 p-6 shadow-[0_30px_90px_rgba(42,70,52,0.18)] sm:p-8"><div className="flex items-center gap-3"><span className="grid size-12 place-items-center rounded-2xl bg-[#9ad66f] text-lg font-black text-white shadow-lg shadow-lime-200">B</span><div><h1 className="text-xl font-semibold">BrandFlow OS</h1><p className="mt-1 text-xs text-slate-400">品牌数据中心</p></div></div><div className="mt-8 flex rounded-2xl bg-[#f3f7f1] p-1">{([['signin','登录'],['signup','注册']] as const).map(([id,label])=><button type="button" key={id} onClick={()=>{setMode(id);setMessage('')}} className={`h-10 flex-1 rounded-xl text-sm font-semibold transition ${mode===id?'bg-white text-[#4f8248] shadow-sm':'text-slate-400'}`}>{label}</button>)}</div><form onSubmit={submit} className="mt-6 space-y-4"><Field label="邮箱"><input type="email" required autoComplete="email" value={email} onChange={e=>setEmail(e.target.value)} placeholder="name@example.com"/></Field><Field label="密码"><input type="password" required minLength={6} autoComplete={mode==='signin'?'current-password':'new-password'} value={password} onChange={e=>setPassword(e.target.value)} placeholder="至少 6 位密码"/></Field>{mode==='signup'&&<Field label="六位邀请码"><div className="relative"><KeyRound size={17} className="absolute left-4 top-1/2 -translate-y-1/2 text-[#79a96a]"/><input inputMode="numeric" pattern="[0-9]{6}" maxLength={6} autoComplete="one-time-code" value={inviteCode} onChange={e=>setInviteCode(e.target.value.replace(/\D/g,'').slice(0,6))} placeholder="首次安装可留空，其他用户需填写" className="pl-11"/></div></Field>}{message&&<p className={`rounded-2xl px-4 py-3 text-xs leading-5 ${message.includes('成功')?'bg-emerald-50 text-emerald-700':'bg-rose-50 text-rose-600'}`}>{message}</p>}<SubmitButton label={loading?'请稍候...':mode==='signin'?'登录数据中心':'使用邀请码注册'}/></form></motion.main></div>
+  return <div className="relative grid min-h-screen place-items-center overflow-hidden bg-[#eaf2e7] p-4"><img src="/assets/project-home.jpg" alt="创艺装饰空间" className="absolute inset-0 h-full w-full object-cover opacity-25"/><div className="absolute inset-0 bg-white/60 backdrop-blur-sm"/><motion.main initial={{opacity:0,y:18}} animate={{opacity:1,y:0}} className="relative w-full max-w-md rounded-3xl border border-white bg-white/95 p-6 shadow-[0_30px_90px_rgba(42,70,52,0.18)] sm:p-8"><div className="flex items-center gap-3"><span className="grid size-12 place-items-center rounded-2xl bg-[#9ad66f] text-lg font-black text-white shadow-lg shadow-lime-200">B</span><div><h1 className="text-xl font-semibold">BrandFlow OS</h1><p className="mt-1 text-xs text-slate-400">品牌数据中心</p></div></div><div className="mt-8 flex rounded-2xl bg-[#f3f7f1] p-1">{([['signin','登录'],['signup','注册']] as const).map(([id,label])=><button type="button" key={id} onClick={()=>{setMode(id);setMessage('')}} className={`h-10 flex-1 rounded-xl text-sm font-semibold transition ${mode===id?'bg-white text-[#4f8248] shadow-sm':'text-slate-400'}`}>{label}</button>)}</div><form onSubmit={submit} className="mt-6 space-y-4"><Field label="邮箱"><input type="email" required autoComplete="email" value={email} onChange={e=>setEmail(e.target.value)} placeholder="name@example.com"/></Field><Field label="密码"><input type="password" required minLength={6} autoComplete={mode==='signin'?'current-password':'new-password'} value={password} onChange={e=>setPassword(e.target.value)} placeholder="至少 6 位密码"/></Field>{mode==='signup'&&<Field label="六位邀请码"><div className="relative rounded-2xl bg-[#f3f7f1] p-2 transition focus-within:bg-[#edf6e9] focus-within:ring-4 focus-within:ring-emerald-50"><input aria-label="六位邀请码" inputMode="numeric" pattern="[0-9]{6}" maxLength={6} autoComplete="one-time-code" value={inviteCode} onChange={e=>setInviteCode(e.target.value.replace(/\D/g,'').slice(0,6))} className="absolute inset-0 z-10 h-full w-full cursor-text opacity-0"/><div aria-hidden="true" className="grid grid-cols-6 gap-2">{Array.from({length:6},(_,index)=><span key={index} className={`grid h-11 min-w-0 place-items-center rounded-xl border bg-white text-lg font-semibold transition ${inviteCode[index]?'border-[#9dcc87] text-[#3f7341] shadow-sm':'border-white text-slate-300'}`}>{inviteCode[index]||'·'}</span>)}</div></div><p className="mt-2 text-[11px] text-slate-400">首次安装可留空，其他用户需填写超级管理员提供的邀请码</p></Field>}{message&&<p className={`rounded-2xl px-4 py-3 text-xs leading-5 ${message.includes('成功')?'bg-emerald-50 text-emerald-700':'bg-rose-50 text-rose-600'}`}>{message}</p>}<SubmitButton label={loading?'请稍候...':mode==='signin'?'登录数据中心':'使用邀请码注册'}/></form></motion.main></div>
 }
 
 function AccessDenied(){
@@ -427,21 +427,313 @@ function Assets(){
 
 function AiPage(){const [text,setText]=useState('');return <><PageHead eyebrow="AI Workspace" title="AI 品牌助手" desc="结合你的品牌数据、内容资产与项目上下文。"/><Card className="mx-auto max-w-4xl overflow-hidden"><div className="border-b border-slate-100 p-6"><div className="flex items-center gap-3"><span className="grid size-11 place-items-center rounded-2xl bg-[#e4f3dc] text-[#5c9e48]"><WandSparkles size={21}/></span><div><h2 className="font-semibold">BrandFlow AI</h2><p className="text-xs text-slate-400">品牌知识库已连接 · 128 个文件</p></div></div></div><div className="min-h-[380px] p-6"><div className="flex max-w-xl gap-3"><span className="grid size-9 shrink-0 place-items-center rounded-2xl bg-[#e4f3dc] text-[#5c9e48]"><Sparkles size={17}/></span><p className="rounded-3xl rounded-tl-md bg-[#f4f7f2] p-4 text-sm leading-7 text-slate-600">你好，我可以帮你分析两个品牌的数据差异、生成装修短视频脚本，或根据工地素材提出内容选题。</p></div></div><div className="m-4 flex items-end gap-2 rounded-3xl border border-slate-100 bg-[#f8faf7] p-2"><textarea value={text} onChange={e=>setText(e.target.value)} className="min-h-14 flex-1 resize-none bg-transparent p-3 text-sm outline-none" placeholder="输入问题或使用 / 调用数据..."/><motion.button whileHover={{scale:1.05}} className="grid size-11 place-items-center rounded-2xl bg-[#8dcc65] text-white"><ArrowUpRight size={18}/></motion.button></div></Card></>}
 
-function SettingsPage({brands,setBrands,onSave}:{brands:BrandConfig;setBrands:(b:BrandConfig)=>void;onSave:(b:BrandConfig)=>Promise<void>}){
-  const [status,setStatus]=useState('')
-  const [invites,setInvites]=useState<InviteRow[]>([])
-  const [inviteHours,setInviteHours]=useState(24)
-  const [inviteUses,setInviteUses]=useState(1)
-  const [generatedCode,setGeneratedCode]=useState('')
-  const [inviteStatus,setInviteStatus]=useState('')
-  const loadInvites=async()=>{if(!isSupabaseConfigured)return;try{setInvites(await listBrandFlowInvites())}catch(error){setInviteStatus(error instanceof Error?error.message:'邀请码加载失败')}}
-  useEffect(()=>{loadInvites()},[])
-  const save=async()=>{setStatus('正在保存...');try{await onSave(brands);setStatus('已同步到云端')}catch(error){setStatus(error instanceof Error?error.message:'保存失败')}}
-  const generateInvite=async()=>{setInviteStatus('正在生成...');setGeneratedCode('');try{const result=await createBrandFlowInvite(inviteHours,inviteUses);setGeneratedCode(result.code);setInviteStatus('邀请码已生成，仅在这里显示一次');await loadInvites()}catch(error){setInviteStatus(error instanceof Error?error.message:'邀请码生成失败')}}
-  const copyInvite=async()=>{if(!generatedCode)return;await navigator.clipboard.writeText(generatedCode);setInviteStatus('邀请码已复制')}
-  const revokeInvite=async(id:string)=>{if(!window.confirm('确定撤销这个邀请码吗？撤销后将无法用于注册。'))return;try{await revokeBrandFlowInvite(id);setInviteStatus('邀请码已撤销');await loadInvites()}catch(error){setInviteStatus(error instanceof Error?error.message:'撤销失败')}}
-  const inviteLabel=(invite:InviteRow)=>invite.revoked_at?'已撤销':invite.use_count>=invite.max_uses?'已用完':new Date(invite.expires_at)<=new Date()?'已过期':'可使用'
-  return <><PageHead eyebrow="Settings" title="品牌与账号设置" desc="配置两个品牌名称、个人工作空间和访问权限。"/><motion.div variants={gridMotion} initial="hidden" animate="show" className="grid gap-4 lg:grid-cols-[.65fr_1.35fr]"><Card className="p-6"><h2 className="font-semibold">个人资料</h2><div className="mt-6 flex items-center gap-4"><span className="grid size-16 place-items-center rounded-full bg-[#dff2d6] text-lg font-bold text-[#528644]">CY</span><div><b className="block">创艺运营</b><span className="text-xs text-slate-400">品牌内容负责人</span></div></div></Card><Card className="p-6"><h2 className="font-semibold">品牌名称</h2><p className="mt-1 text-xs text-slate-400">修改名称不会影响历史数据。</p><div className="mt-6 grid gap-4 sm:grid-cols-2"><Field label="创艺装饰"><input value={brands.brandA} onChange={e=>setBrands({...brands,brandA:e.target.value})}/></Field><Field label="喜客喜装饰"><input value={brands.brandB} onChange={e=>setBrands({...brands,brandB:e.target.value})}/></Field></div><div className="mt-6 flex items-center gap-3"><motion.button onClick={save} whileHover={{scale:1.02}} className="h-11 rounded-2xl bg-[#8dcc65] px-5 text-sm font-semibold text-white">保存设置</motion.button>{status&&<span className="text-xs text-slate-400">{status}</span>}</div></Card><Card className="p-6 lg:col-span-2"><div className="flex items-start gap-3"><span className="grid size-11 shrink-0 place-items-center rounded-2xl bg-emerald-50 text-emerald-600"><KeyRound size={20}/></span><div><h2 className="font-semibold">注册邀请码</h2><p className="mt-1 text-xs text-slate-400">邀请新成员加入。原码不会存储，生成后只显示一次。</p></div></div><div className="mt-6 grid gap-4 sm:grid-cols-[1fr_1fr_auto]"><Field label="有效时间"><select value={inviteHours} onChange={e=>setInviteHours(Number(e.target.value))}><option value={24}>24 小时</option><option value={72}>3 天</option><option value={168}>7 天</option></select></Field><Field label="可使用次数"><select value={inviteUses} onChange={e=>setInviteUses(Number(e.target.value))}><option value={1}>1 次</option><option value={3}>3 次</option><option value={5}>5 次</option></select></Field><motion.button onClick={generateInvite} whileHover={{y:-2}} whileTap={{scale:.98}} className="mt-auto flex h-11 items-center justify-center gap-2 rounded-2xl bg-[#8dcc65] px-5 text-sm font-semibold text-white"><Plus size={17}/>生成邀请码</motion.button></div>{generatedCode&&<motion.div initial={{opacity:0,y:8}} animate={{opacity:1,y:0}} className="mt-5 flex flex-col gap-3 rounded-2xl border border-emerald-100 bg-[#f4faf1] p-4 sm:flex-row sm:items-center"><div className="flex flex-1 justify-center gap-2 sm:justify-start">{generatedCode.split('').map((digit,index)=><span key={`${digit}-${index}`} className="grid size-10 place-items-center rounded-xl bg-white text-lg font-semibold text-[#3f7341] shadow-sm">{digit}</span>)}</div><button onClick={copyInvite} className="flex h-10 items-center justify-center gap-2 rounded-xl bg-white px-4 text-xs font-semibold text-[#4f8248] shadow-sm"><Copy size={15}/>复制</button></motion.div>}{inviteStatus&&<p className="mt-3 text-xs text-slate-400">{inviteStatus}</p>}<div className="mt-6 overflow-x-auto"><table className="w-full min-w-[620px] text-left"><thead className="text-[11px] text-slate-400"><tr><th className="pb-3 font-medium">创建时间</th><th className="pb-3 font-medium">有效期至</th><th className="pb-3 font-medium">使用情况</th><th className="pb-3 font-medium">状态</th><th className="pb-3 text-right font-medium">操作</th></tr></thead><tbody>{invites.map(invite=><tr key={invite.id} className="border-t border-slate-100 text-sm"><td className="py-3 text-slate-500">{new Date(invite.created_at).toLocaleString('zh-CN',{month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit'})}</td><td className="py-3 text-slate-500">{new Date(invite.expires_at).toLocaleString('zh-CN',{month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit'})}</td><td className="py-3">{invite.use_count} / {invite.max_uses}</td><td className="py-3"><span className={`rounded-full px-2.5 py-1 text-[11px] font-semibold ${inviteLabel(invite)==='可使用'?'bg-emerald-50 text-emerald-700':'bg-slate-100 text-slate-500'}`}>{inviteLabel(invite)}</span></td><td className="py-3 text-right"><button disabled={inviteLabel(invite)!=='可使用'} onClick={()=>revokeInvite(invite.id)} className="rounded-xl px-3 py-1.5 text-xs font-medium text-rose-500 transition hover:bg-rose-50 disabled:cursor-not-allowed disabled:opacity-30">撤销</button></td></tr>)}</tbody></table>{!invites.length&&<div className="border-t border-slate-100 py-8 text-center text-xs text-slate-400">还没有生成过邀请码</div>}</div></Card></motion.div></>
+function SettingsPage({
+  brands,
+  setBrands,
+  onSave,
+}: {
+  brands: BrandConfig;
+  setBrands: (b: BrandConfig) => void;
+  onSave: (b: BrandConfig) => Promise<void>;
+}) {
+  const [status, setStatus] = useState("");
+  const [accessRole, setAccessRole] = useState<
+    "loading" | "super_admin" | "member"
+  >("loading");
+  const [invites, setInvites] = useState<InviteRow[]>([]);
+  const [inviteHours, setInviteHours] = useState(24);
+  const [inviteUses, setInviteUses] = useState(1);
+  const [generatedCode, setGeneratedCode] = useState("");
+  const [inviteStatus, setInviteStatus] = useState("");
+  const loadInvites = async () => {
+    if (!isSupabaseConfigured) return;
+    try {
+      setInvites(await listBrandFlowInvites());
+    } catch (error) {
+      setInviteStatus(
+        error instanceof Error ? error.message : "邀请码加载失败",
+      );
+    }
+  };
+  useEffect(() => {
+    if (!isSupabaseConfigured) {
+      setAccessRole("super_admin");
+      return;
+    }
+    getBrandFlowAccessRole()
+      .then((role) => {
+        setAccessRole(role);
+        if (role === "super_admin") loadInvites();
+      })
+      .catch(() => setAccessRole("member"));
+  }, []);
+  const save = async () => {
+    setStatus("正在保存...");
+    try {
+      await onSave(brands);
+      setStatus("已同步到云端");
+    } catch (error) {
+      setStatus(error instanceof Error ? error.message : "保存失败");
+    }
+  };
+  const generateInvite = async () => {
+    setInviteStatus("正在生成...");
+    setGeneratedCode("");
+    try {
+      const result = await createBrandFlowInvite(inviteHours, inviteUses);
+      setGeneratedCode(result.code);
+      setInviteStatus("邀请码已生成，仅在这里显示一次");
+      await loadInvites();
+    } catch (error) {
+      setInviteStatus(
+        error instanceof Error ? error.message : "邀请码生成失败",
+      );
+    }
+  };
+  const copyInvite = async () => {
+    if (!generatedCode) return;
+    await navigator.clipboard.writeText(generatedCode);
+    setInviteStatus("邀请码已复制");
+  };
+  const revokeInvite = async (id: string) => {
+    if (!window.confirm("确定撤销这个邀请码吗？撤销后将无法用于注册。")) return;
+    try {
+      await revokeBrandFlowInvite(id);
+      setInviteStatus("邀请码已撤销");
+      await loadInvites();
+    } catch (error) {
+      setInviteStatus(error instanceof Error ? error.message : "撤销失败");
+    }
+  };
+  const inviteLabel = (invite: InviteRow) =>
+    invite.revoked_at
+      ? "已撤销"
+      : invite.use_count >= invite.max_uses
+        ? "已用完"
+        : new Date(invite.expires_at) <= new Date()
+          ? "已过期"
+          : "可使用";
+  return (
+    <>
+      <PageHead
+        eyebrow="Settings"
+        title="品牌与账号设置"
+        desc="配置两个品牌名称、个人工作空间和访问权限。"
+      />
+      <motion.div
+        variants={gridMotion}
+        initial="hidden"
+        animate="show"
+        className="grid gap-4 lg:grid-cols-[.65fr_1.35fr]"
+      >
+        <Card className="p-6">
+          <h2 className="font-semibold">个人资料</h2>
+          <div className="mt-6 flex items-center gap-4">
+            <span className="grid size-16 place-items-center rounded-full bg-[#dff2d6] text-lg font-bold text-[#528644]">
+              CY
+            </span>
+            <div>
+              <b className="block">创艺运营</b>
+              <span className="text-xs text-slate-400">品牌内容负责人</span>
+              {accessRole !== "loading" && (
+                <span
+                  className={`mt-2 flex w-fit items-center gap-1 rounded-full px-2.5 py-1 text-[10px] font-semibold ${accessRole === "super_admin" ? "bg-emerald-50 text-emerald-700" : "bg-slate-100 text-slate-500"}`}
+                >
+                  <ShieldCheck size={12} />
+                  {accessRole === "super_admin" ? "超级管理员" : "普通成员"}
+                </span>
+              )}
+            </div>
+          </div>
+        </Card>
+        <Card className="p-6">
+          <h2 className="font-semibold">品牌名称</h2>
+          <p className="mt-1 text-xs text-slate-400">
+            修改名称不会影响历史数据。
+          </p>
+          <div className="mt-6 grid gap-4 sm:grid-cols-2">
+            <Field label="创艺装饰">
+              <input
+                value={brands.brandA}
+                onChange={(e) =>
+                  setBrands({ ...brands, brandA: e.target.value })
+                }
+              />
+            </Field>
+            <Field label="喜客喜装饰">
+              <input
+                value={brands.brandB}
+                onChange={(e) =>
+                  setBrands({ ...brands, brandB: e.target.value })
+                }
+              />
+            </Field>
+          </div>
+          <div className="mt-6 flex items-center gap-3">
+            <motion.button
+              onClick={save}
+              whileHover={{ scale: 1.02 }}
+              className="h-11 rounded-2xl bg-[#8dcc65] px-5 text-sm font-semibold text-white"
+            >
+              保存设置
+            </motion.button>
+            {status && <span className="text-xs text-slate-400">{status}</span>}
+          </div>
+        </Card>
+        {accessRole === "super_admin" ? (
+          <Card className="p-6 lg:col-span-2">
+            <div className="flex items-start gap-3">
+              <span className="grid size-11 shrink-0 place-items-center rounded-2xl bg-emerald-50 text-emerald-600">
+                <KeyRound size={20} />
+              </span>
+              <div>
+                <h2 className="font-semibold">注册邀请码</h2>
+                <p className="mt-1 text-xs text-slate-400">
+                  设置 /
+                  注册邀请码。选择有效时间和使用次数后生成，原码只显示一次。
+                </p>
+              </div>
+            </div>
+            <div className="mt-6 grid gap-4 sm:grid-cols-[1fr_1fr_auto]">
+              <Field label="有效时间">
+                <select
+                  value={inviteHours}
+                  onChange={(e) => setInviteHours(Number(e.target.value))}
+                >
+                  <option value={24}>24 小时</option>
+                  <option value={72}>3 天</option>
+                  <option value={168}>7 天</option>
+                </select>
+              </Field>
+              <Field label="可使用次数">
+                <select
+                  value={inviteUses}
+                  onChange={(e) => setInviteUses(Number(e.target.value))}
+                >
+                  <option value={1}>1 次</option>
+                  <option value={3}>3 次</option>
+                  <option value={5}>5 次</option>
+                </select>
+              </Field>
+              <motion.button
+                onClick={generateInvite}
+                whileHover={{ y: -2 }}
+                whileTap={{ scale: 0.98 }}
+                className="mt-auto flex h-11 items-center justify-center gap-2 rounded-2xl bg-[#8dcc65] px-5 text-sm font-semibold text-white"
+              >
+                <Plus size={17} />
+                生成邀请码
+              </motion.button>
+            </div>
+            {generatedCode && (
+              <motion.div
+                initial={{ opacity: 0, y: 8 }}
+                animate={{ opacity: 1, y: 0 }}
+                className="mt-5 flex flex-col gap-3 rounded-2xl border border-emerald-100 bg-[#f4faf1] p-4 sm:flex-row sm:items-center"
+              >
+                <div className="flex flex-1 justify-center gap-2 sm:justify-start">
+                  {generatedCode.split("").map((digit, index) => (
+                    <span
+                      key={`${digit}-${index}`}
+                      className="grid size-10 place-items-center rounded-xl bg-white text-lg font-semibold text-[#3f7341] shadow-sm"
+                    >
+                      {digit}
+                    </span>
+                  ))}
+                </div>
+                <button
+                  onClick={copyInvite}
+                  className="flex h-10 items-center justify-center gap-2 rounded-xl bg-white px-4 text-xs font-semibold text-[#4f8248] shadow-sm"
+                >
+                  <Copy size={15} />
+                  复制
+                </button>
+              </motion.div>
+            )}
+            {inviteStatus && (
+              <p className="mt-3 text-xs text-slate-400">{inviteStatus}</p>
+            )}
+            <div className="mt-6 overflow-x-auto">
+              <table className="w-full min-w-[620px] text-left">
+                <thead className="text-[11px] text-slate-400">
+                  <tr>
+                    <th className="pb-3 font-medium">创建时间</th>
+                    <th className="pb-3 font-medium">有效期至</th>
+                    <th className="pb-3 font-medium">使用情况</th>
+                    <th className="pb-3 font-medium">状态</th>
+                    <th className="pb-3 text-right font-medium">操作</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {invites.map((invite) => (
+                    <tr
+                      key={invite.id}
+                      className="border-t border-slate-100 text-sm"
+                    >
+                      <td className="py-3 text-slate-500">
+                        {new Date(invite.created_at).toLocaleString("zh-CN", {
+                          month: "2-digit",
+                          day: "2-digit",
+                          hour: "2-digit",
+                          minute: "2-digit",
+                        })}
+                      </td>
+                      <td className="py-3 text-slate-500">
+                        {new Date(invite.expires_at).toLocaleString("zh-CN", {
+                          month: "2-digit",
+                          day: "2-digit",
+                          hour: "2-digit",
+                          minute: "2-digit",
+                        })}
+                      </td>
+                      <td className="py-3">
+                        {invite.use_count} / {invite.max_uses}
+                      </td>
+                      <td className="py-3">
+                        <span
+                          className={`rounded-full px-2.5 py-1 text-[11px] font-semibold ${inviteLabel(invite) === "可使用" ? "bg-emerald-50 text-emerald-700" : "bg-slate-100 text-slate-500"}`}
+                        >
+                          {inviteLabel(invite)}
+                        </span>
+                      </td>
+                      <td className="py-3 text-right">
+                        <button
+                          disabled={inviteLabel(invite) !== "可使用"}
+                          onClick={() => revokeInvite(invite.id)}
+                          className="rounded-xl px-3 py-1.5 text-xs font-medium text-rose-500 transition hover:bg-rose-50 disabled:cursor-not-allowed disabled:opacity-30"
+                        >
+                          撤销
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+              {!invites.length && (
+                <div className="border-t border-slate-100 py-8 text-center text-xs text-slate-400">
+                  还没有生成过邀请码
+                </div>
+              )}
+            </div>
+          </Card>
+        ) : accessRole === "member" ? (
+          <Card className="p-6 lg:col-span-2">
+            <div className="flex items-center gap-3">
+              <span className="grid size-11 place-items-center rounded-2xl bg-slate-100 text-slate-500">
+                <ShieldCheck size={20} />
+              </span>
+              <div>
+                <h2 className="font-semibold">成员权限</h2>
+                <p className="mt-1 text-xs text-slate-400">
+                  当前账号为普通成员，邀请码仅由超级管理员生成和管理。
+                </p>
+              </div>
+            </div>
+          </Card>
+        ) : null}
+      </motion.div>
+    </>
+  );
 }
 
 export default App
