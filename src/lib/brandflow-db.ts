@@ -1,6 +1,7 @@
 import { requireSupabase } from './supabase'
 
 export type BrandCode = 'brandA' | 'brandB'
+export type AccessRole = 'super_admin' | 'admin' | 'member'
 
 export type BrandRow = {
   id: string
@@ -26,6 +27,20 @@ export type InviteRow = {
   max_uses: number
   use_count: number
   revoked_at: string | null
+}
+
+export type AdminUserRow = {
+  user_id: string
+  email: string
+  display_name: string
+  access_role: AccessRole
+  created_at: string
+}
+
+export type ProfileRow = {
+  display_name: string
+  role: string
+  avatar_url: string | null
 }
 
 async function currentUserId() {
@@ -57,11 +72,38 @@ export async function isBrandFlowAuthorized() {
   return data === true
 }
 
-export async function getBrandFlowAccessRole() {
+export async function getBrandFlowAccessRole(): Promise<AccessRole> {
   const client = requireSupabase()
   const { data, error } = await client.rpc('get_brandflow_access_role')
   if (error) throw error
-  return data === 'super_admin' ? 'super_admin' : 'member'
+  return data === 'super_admin' || data === 'admin' ? data : 'member'
+}
+
+export async function listBrandFlowUsers() {
+  const client = requireSupabase()
+  const { data, error } = await client.rpc('list_brandflow_users')
+  return assertData(data as AdminUserRow[] | null, error)
+}
+
+export async function setBrandFlowUserRole(userId: string, role: 'admin' | 'member') {
+  const client = requireSupabase()
+  const { error } = await client.rpc('set_brandflow_user_role', {
+    target_user: userId,
+    target_role: role,
+  })
+  if (error) throw error
+}
+
+export async function saveProfile(displayName: string) {
+  const client = requireSupabase()
+  const userId = await currentUserId()
+  const { data, error } = await client
+    .from('profiles')
+    .update({ display_name: displayName.trim() })
+    .eq('id', userId)
+    .select('display_name, role, avatar_url')
+    .single()
+  return assertData(data as ProfileRow | null, error)
 }
 
 export async function createBrandFlowInvite(validHours = 24, allowedUses = 1) {

@@ -6,3 +6,9 @@ dist/
 *.log
 .DS_Store
 Thumbs.db
+
+# Tencent Cloud EdgeOne
+.env
+.edgeone/*
+.tef_dist/*
+BrandFlow-OS-EdgeOne.zip

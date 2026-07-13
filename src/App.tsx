@@ -4,10 +4,10 @@ import type { Variants } from 'framer-motion'
 import type { Session } from '@supabase/supabase-js'
 import {
   Activity, ArrowLeftRight, ArrowUpRight, Bell, CalendarDays, CheckCircle2, Copy,
-  ChevronDown, CircleDashed, Database, Download, FileChartColumn, FileText,
+  ChevronDown, CircleDashed, Crown, Database, Download, FileChartColumn, FileText,
   Droplets, Flower2, FolderKanban, HardDrive, House, Images, LayoutDashboard,
   KeyRound, Lightbulb, LogOut, Menu, MoreHorizontal, Play, Plus, Search, Settings, Share2,
-  ShieldCheck, Sparkles, Sprout, Sun, Trash2, TrendingUp, Trophy, Upload, Users,
+  ShieldCheck, Sparkles, Sprout, Sun, Trash2, TrendingUp, Trophy, Upload, UserCog, Users,
   WandSparkles, X,
 } from 'lucide-react'
 import {
@@ -17,15 +17,17 @@ import {
 import { isSupabaseConfigured, supabase } from './lib/supabase'
 import {
   assetsDb, bootstrapBrandFlow, contentsDb, createBrandFlowInvite, deleteMetric,
-  getBrandFlowAccessRole, ideasDb, isBrandFlowAuthorized, listBrandFlowInvites, loadCoreData, loadGarden,
-  plansDb, projectsDb, revokeBrandFlowInvite, saveBrandName, saveGarden, saveMetric,
-  uploadAsset, type InviteRow,
+  getBrandFlowAccessRole, ideasDb, isBrandFlowAuthorized, listBrandFlowInvites, listBrandFlowUsers,
+  loadCoreData, loadGarden, plansDb, projectsDb, revokeBrandFlowInvite,
+  saveGarden, saveMetric, saveProfile, setBrandFlowUserRole, uploadAsset, type AccessRole,
+  type AdminUserRow, type InviteRow,
 } from './lib/brandflow-db'
 
 type BrandId = 'brandA' | 'brandB'
-type PageId = 'dashboard' | 'plan' | 'projects' | 'content' | 'data' | 'assets' | 'ideas' | 'garden' | 'ai' | 'settings'
+type PageId = 'dashboard' | 'plan' | 'projects' | 'content' | 'data' | 'assets' | 'ideas' | 'garden' | 'ai' | 'admin' | 'settings'
 type BrandConfig = Record<BrandId, string>
 type MetricEntry = { id: string; date: string; brand: BrandId; views: number; shares: number; followers: number }
+type UserProfile = { displayName: string; jobTitle: string; avatarUrl: string | null }
 
 const defaultBrands: BrandConfig = { brandA: '创艺装饰', brandB: '喜客喜装饰' }
 const defaultEntries: MetricEntry[] = [
@@ -40,7 +42,8 @@ const defaultEntries: MetricEntry[] = [
 const navItems = [
   ['dashboard','首页',House],['plan','工作计划',CalendarDays],['projects','项目中心',FolderKanban],
   ['content','内容中心',FileText],['data','数据中心',Database],['assets','素材中心',Images],
-  ['ideas','灵感中心',Lightbulb],['garden','我的花园',Flower2],['ai','AI中心',Sparkles],['settings','设置',Settings],
+  ['ideas','灵感中心',Lightbulb],['garden','我的花园',Flower2],['ai','AI中心',Sparkles],
+  ['admin','管理员设置',UserCog],['settings','设置',Settings],
 ] as const
 
 const assets = [
@@ -55,9 +58,13 @@ const cardClass = 'rounded-3xl border border-white/90 bg-white shadow-[0_18px_55
 
 function fmt(value:number){ return value.toLocaleString('zh-CN') }
 function stored<T>(key:string,fallback:T):T{try{return JSON.parse(localStorage.getItem(key)||'null')||fallback}catch{return fallback}}
+function dateKey(date:Date){
+  const pad=(value:number)=>String(value).padStart(2,'0')
+  return `${date.getFullYear()}-${pad(date.getMonth()+1)}-${pad(date.getDate())}`
+}
 
-function Card({ children, className='' }: { children:React.ReactNode; className?:string }) {
-  return <motion.section variants={cardMotion} whileHover={{y:-3,transition:{duration:.2}}} className={`${cardClass} ${className}`}>{children}</motion.section>
+function Card({ children, className='', onClick, ariaLabel }: { children:React.ReactNode; className?:string; onClick?:()=>void; ariaLabel?:string }) {
+  return <motion.section variants={cardMotion} whileHover={{y:-3,transition:{duration:.2}}} onClick={onClick} role={onClick?'button':undefined} tabIndex={onClick?0:undefined} aria-label={ariaLabel} onKeyDown={onClick?(event)=>{if(event.key==='Enter'||event.key===' '){event.preventDefault();onClick()}}:undefined} className={`${cardClass} ${onClick?'cursor-pointer outline-none transition focus-visible:ring-4 focus-visible:ring-emerald-100':''} ${className}`}>{children}</motion.section>
 }
 
 function Status({ value }: { value:string }) {
@@ -105,12 +112,15 @@ function App(){
   const [session,setSession]=useState<Session|null>(null)
   const [authLoading,setAuthLoading]=useState(isSupabaseConfigured)
   const [accessState,setAccessState]=useState<'checking'|'granted'|'denied'>(isSupabaseConfigured?'checking':'granted')
+  const [accessRole,setAccessRole]=useState<AccessRole>(isSupabaseConfigured?'member':'super_admin')
   const [dataLoading,setDataLoading]=useState(false)
   const [cloudError,setCloudError]=useState('')
   const [entries,setEntries]=useState<MetricEntry[]>(()=>{try{return JSON.parse(localStorage.getItem('brandflow-metrics')||'null')||defaultEntries}catch{return defaultEntries}})
   const [brands,setBrands]=useState<BrandConfig>(()=>{try{const saved=JSON.parse(localStorage.getItem('brandflow-brands')||'null');return {...defaultBrands,...saved,brandB:!saved?.brandB||saved.brandB==='品牌二'?'喜客喜装饰':saved.brandB}}catch{return defaultBrands}})
+  const [profile,setProfile]=useState<UserProfile>(()=>stored('brandflow-profile',{displayName:'BrandFlow 用户',jobTitle:'品牌内容负责人',avatarUrl:null}))
   useEffect(()=>{if(!isSupabaseConfigured)localStorage.setItem('brandflow-metrics',JSON.stringify(entries))},[entries])
   useEffect(()=>{if(!isSupabaseConfigured)localStorage.setItem('brandflow-brands',JSON.stringify(brands))},[brands])
+  useEffect(()=>{if(!isSupabaseConfigured)localStorage.setItem('brandflow-profile',JSON.stringify(profile))},[profile])
 
   useEffect(()=>{
     if(!supabase){setAuthLoading(false);return}
@@ -127,13 +137,16 @@ function App(){
       try{
         setAccessState('checking')
         if(!await isBrandFlowAuthorized()){if(active)setAccessState('denied');return}
-        if(active)setAccessState('granted')
+        const role=await getBrandFlowAccessRole()
+        if(active){setAccessRole(role);setAccessState('granted')}
         await bootstrapBrandFlow()
         const core=await loadCoreData()
         if(!active)return
         const brandById=new Map(core.brands.map(brand=>[brand.id,brand.code]))
         setBrands(core.brands.reduce((result,brand)=>({...result,[brand.code]:brand.name}),defaultBrands))
         setEntries(core.metrics.map(metric=>({id:String(metric.id),date:metric.metric_date,brand:brandById.get(metric.brand_id)||'brandA',views:Number(metric.views),shares:Number(metric.shares),followers:Number(metric.follower_growth)})))
+        const emailName=session.user.email?.split('@')[0]||'BrandFlow 用户'
+        setProfile({displayName:core.profile?.display_name||emailName,jobTitle:core.profile?.role||'品牌内容负责人',avatarUrl:core.profile?.avatar_url||null})
       }catch(error){if(active){setAccessState('denied');setCloudError(error instanceof Error?error.message:'云端数据加载失败')}}
       finally{if(active)setDataLoading(false)}
     })()
@@ -149,9 +162,15 @@ function App(){
     if(isSupabaseConfigured)await deleteMetric(Number(id))
     setEntries(current=>current.filter(entry=>entry.id!==id))
   }
-  const saveBrands=async(nextBrands:BrandConfig)=>{
-    setBrands(nextBrands)
-    if(isSupabaseConfigured)await Promise.all((['brandA','brandB'] as BrandId[]).map(code=>saveBrandName(code,nextBrands[code])))
+  const savePersonalProfile=async(displayName:string)=>{
+    const cleanName=displayName.trim()
+    if(!cleanName)throw new Error('昵称不能为空。')
+    if(isSupabaseConfigured){
+      const row=await saveProfile(cleanName)
+      setProfile({displayName:row.display_name,jobTitle:row.role,avatarUrl:row.avatar_url})
+      return
+    }
+    setProfile(current=>({...current,displayName:cleanName}))
   }
 
   const chartData=useMemo(()=>Array.from(new Set(entries.map(e=>e.date))).sort().map(date=>{
@@ -170,13 +189,13 @@ function App(){
     <Sidebar page={page} setPage={setPage} open={menuOpen} setOpen={setMenuOpen}/>
     {menuOpen&&<motion.button initial={{opacity:0}} animate={{opacity:1}} onClick={()=>setMenuOpen(false)} className="fixed inset-0 z-30 bg-slate-900/20 backdrop-blur-sm lg:hidden" aria-label="关闭导航"/>}
     <div className="min-h-screen lg:pl-[268px]">
-      <Header search={search} setSearch={setSearch} openMenu={()=>setMenuOpen(true)} cloud={isSupabaseConfigured} onOpenSettings={()=>setPage('settings')} onSignOut={()=>supabase?.auth.signOut()}/>
+      <Header search={search} setSearch={setSearch} openMenu={()=>setMenuOpen(true)} cloud={isSupabaseConfigured} profile={profile} accessRole={accessRole} onOpenSettings={()=>setPage('settings')} onSignOut={()=>supabase?.auth.signOut()}/>
       <main className="mx-auto max-w-[1680px] px-4 pb-12 pt-6 sm:px-6 lg:px-8">
         {cloudError&&<div className="mb-4 rounded-2xl border border-rose-100 bg-rose-50 px-4 py-3 text-sm text-rose-600">{cloudError}</div>}
         {dataLoading&&<div className="mb-4 h-1 overflow-hidden rounded-full bg-emerald-100"><motion.div className="h-full w-1/3 rounded-full bg-[#8dcc65]" animate={{x:['-100%','300%']}} transition={{duration:1.2,repeat:Infinity,ease:'easeInOut'}}/></div>}
         <AnimatePresence mode="wait">
           <motion.div key={page} variants={pageMotion} initial="hidden" animate="show" exit={{opacity:0,y:-8,transition:{duration:.18}}}>
-            {page==='dashboard'&&<Dashboard {...pageProps}/>} {page==='plan'&&<WorkPlan/>} {page==='projects'&&<ProjectCenter/>} {page==='content'&&<ContentCenter/>} {page==='data'&&<DataCenter {...pageProps}/>} {page==='assets'&&<Assets/>} {page==='ideas'&&<IdeasCenter/>} {page==='garden'&&<Garden/>} {page==='ai'&&<AiPage/>} {page==='settings'&&<SettingsPage brands={brands} setBrands={setBrands} onSave={saveBrands}/>}
+            {page==='dashboard'&&<Dashboard {...pageProps}/>} {page==='plan'&&<WorkPlan/>} {page==='projects'&&<ProjectCenter/>} {page==='content'&&<ContentCenter/>} {page==='data'&&<DataCenter {...pageProps}/>} {page==='assets'&&<Assets/>} {page==='ideas'&&<IdeasCenter/>} {page==='garden'&&<Garden/>} {page==='ai'&&<AiPage/>} {page==='admin'&&<AdminSettingsPage accessRole={accessRole}/>} {page==='settings'&&<SettingsPage profile={profile} onSaveProfile={savePersonalProfile} accessRole={accessRole}/>}
           </motion.div>
         </AnimatePresence>
       </main>
@@ -186,40 +205,79 @@ function App(){
 
 function Sidebar({page,setPage,open,setOpen}:{page:PageId;setPage:(p:PageId)=>void;open:boolean;setOpen:(v:boolean)=>void}){
   return <motion.aside initial={false} animate={{x:open?0:undefined}} className={`fixed inset-y-3 left-3 z-40 flex w-[244px] flex-col rounded-[28px] border border-white bg-white/95 p-4 shadow-[0_24px_70px_rgba(54,84,72,0.12)] backdrop-blur-xl transition-transform lg:translate-x-0 ${open?'translate-x-0':'-translate-x-[110%]'}`}>
-    <div className="flex h-14 items-center gap-3 px-2"><div className="grid size-10 place-items-center rounded-2xl bg-[#9ad66f] font-black text-white shadow-lg shadow-lime-200">B</div><div><strong className="block text-[17px] tracking-tight">BrandFlow</strong><span className="text-[10px] font-medium text-slate-400">PERSONAL DATA OS</span></div><button onClick={()=>setOpen(false)} className="ml-auto grid size-9 place-items-center rounded-xl text-slate-500 hover:bg-slate-100 lg:hidden"><X size={18}/></button></div>
+    <div className="flex h-14 items-center gap-3 px-2"><div className="grid size-10 place-items-center rounded-2xl bg-[#9ad66f] font-black text-white shadow-lg shadow-lime-200">B</div><div><strong className="block text-[17px] tracking-tight">BrandFlow</strong><span className="text-[10px] font-medium text-slate-400">PERSONAL DATA OS</span></div><button aria-label="关闭导航" onClick={()=>setOpen(false)} className="ml-auto grid size-9 place-items-center rounded-xl text-slate-500 hover:bg-slate-100 lg:hidden"><X size={18}/></button></div>
     <div className="my-5 rounded-2xl bg-[#f3f7f2] p-3"><p className="text-xs font-semibold text-slate-700">贵州创艺装饰</p><p className="mt-1 text-[10px] text-slate-400">个人品牌工作空间</p></div>
     <nav className="space-y-1.5">{navItems.map(([id,label,Icon])=><motion.button whileHover={{x:3}} whileTap={{scale:.98}} key={id} onClick={()=>{setPage(id);setOpen(false)}} className={`flex h-11 w-full items-center gap-3 rounded-2xl px-3 text-sm font-medium transition ${page===id?'bg-[#dff2d6] text-[#2d6b35] shadow-sm':'text-slate-500 hover:bg-slate-50 hover:text-slate-900'}`}><Icon size={18}/><span>{label}</span>{page===id&&<motion.i layoutId="nav-dot" className="ml-auto size-1.5 rounded-full bg-[#67bb43]"/>}</motion.button>)}</nav>
     <div className="mt-auto rounded-3xl bg-[#eef5eb] p-4"><div className="flex items-center gap-2 text-sm font-semibold"><HardDrive size={16} className="text-[#67a756]"/>存储空间</div><div className="mt-4 h-2 overflow-hidden rounded-full bg-white"><motion.div initial={{width:0}} animate={{width:'68%'}} transition={{duration:1,ease:'easeOut'}} className="h-full rounded-full bg-[#8dcc65]"/></div><div className="mt-2 flex justify-between text-[10px] text-slate-400"><span>34.2 GB / 50 GB</span><b className="text-slate-600">68%</b></div></div>
   </motion.aside>
 }
 
-function Header({search,setSearch,openMenu,cloud,onOpenSettings,onSignOut}:{search:string;setSearch:(v:string)=>void;openMenu:()=>void;cloud:boolean;onOpenSettings:()=>void;onSignOut:()=>void}){
+function ProfileAvatar({profile,size='md'}:{profile:UserProfile;size?:'md'|'lg'}){
+  const initial=profile.displayName.trim().charAt(0).toUpperCase()||'B'
+  const sizeClass=size==='lg'?'size-16 text-lg':'size-12 text-sm'
+  if(profile.avatarUrl)return <img src={profile.avatarUrl} alt={`${profile.displayName}的头像`} className={`${sizeClass} shrink-0 rounded-full object-cover ring-4 ring-white shadow-md`}/>
+  return <span aria-label={`${profile.displayName}的头像`} className={`grid ${sizeClass} shrink-0 place-items-center rounded-full bg-[#dff2d6] font-bold text-[#4d8648] ring-4 ring-white shadow-md`}>{initial}</span>
+}
+
+function Header({search,setSearch,openMenu,cloud,profile,accessRole,onOpenSettings,onSignOut}:{search:string;setSearch:(v:string)=>void;openMenu:()=>void;cloud:boolean;profile:UserProfile;accessRole:AccessRole;onOpenSettings:()=>void;onSignOut:()=>void}){
   const [profileOpen,setProfileOpen]=useState(false)
-  return <header className="sticky top-0 z-40 px-3 pt-3 sm:px-5">{profileOpen&&<button aria-label="关闭个人菜单" onClick={()=>setProfileOpen(false)} className="fixed inset-0 z-30 cursor-default"/>}<div className="relative z-40 mx-auto flex min-h-16 max-w-[1680px] items-center gap-3 rounded-[24px] border border-white bg-white/90 px-3 py-2 shadow-[0_14px_45px_rgba(54,84,72,0.08)] backdrop-blur-xl sm:px-5"><button onClick={openMenu} className="grid size-10 place-items-center rounded-2xl hover:bg-slate-100 lg:hidden"><Menu size={20}/></button><div className="relative mx-auto w-full max-w-xl"><Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={18}/><input value={search} onChange={e=>setSearch(e.target.value)} placeholder="搜索项目、内容、数据..." className="h-11 w-full rounded-2xl border border-slate-100 bg-[#f7f9f7] pl-11 pr-4 text-sm outline-none transition focus:border-emerald-200 focus:ring-4 focus:ring-emerald-50"/></div><motion.button whileHover={{scale:1.06}} className="relative grid size-11 shrink-0 place-items-center rounded-2xl border border-slate-100 bg-white text-slate-600"><Bell size={19}/><i className={`absolute right-2 top-2 size-2 rounded-full ring-2 ring-white ${cloud?'bg-[#76c853]':'bg-amber-400'}`}/></motion.button><button onClick={()=>setProfileOpen(open=>!open)} aria-expanded={profileOpen} aria-haspopup="menu" className={`hidden min-w-[178px] items-center gap-3 rounded-2xl px-2 py-1.5 transition sm:flex ${profileOpen?'bg-[#f3f7f1]':'hover:bg-slate-50'}`}><span className="grid size-12 shrink-0 place-items-center rounded-full bg-[#dff2d6] text-sm font-bold text-[#4d8648] ring-4 ring-white shadow-md">CY</span><span className="text-left"><b className="block text-sm">创艺运营</b><small className="mt-0.5 block text-[11px] text-slate-400">品牌内容负责人</small></span><motion.span className="ml-auto text-slate-400" animate={{rotate:profileOpen?180:0}}><ChevronDown size={15}/></motion.span></button><AnimatePresence>{profileOpen&&<motion.div role="menu" aria-label="个人中心" initial={{opacity:0,y:-8,scale:.98}} animate={{opacity:1,y:0,scale:1}} exit={{opacity:0,y:-6,scale:.98}} className="absolute right-3 top-[calc(100%+10px)] z-50 w-72 overflow-hidden rounded-3xl border border-white bg-white p-2 shadow-[0_24px_70px_rgba(40,65,50,0.18)] sm:right-5"><div className="flex items-center gap-3 p-3"><span className="grid size-12 shrink-0 place-items-center rounded-full bg-[#dff2d6] text-sm font-bold text-[#4d8648]">CY</span><div><b className="block text-sm">创艺运营</b><span className="text-[11px] text-slate-400">品牌内容负责人</span></div></div><div className="mx-2 mb-2 flex items-center justify-between rounded-2xl bg-[#f4f8f2] px-3 py-2.5 text-xs"><span className="flex items-center gap-2 text-slate-500"><Database size={15}/>Supabase 云端</span><b className={`flex items-center gap-1 ${cloud?'text-emerald-600':'text-amber-600'}`}><CheckCircle2 size={14}/>{cloud?'已连接':'本地模式'}</b></div><button role="menuitem" onClick={()=>{setProfileOpen(false);onOpenSettings()}} className="flex h-11 w-full items-center gap-3 rounded-2xl px-3 text-sm text-slate-600 transition hover:bg-[#f4f7f2]"><Settings size={17}/>账号与品牌设置</button>{cloud&&<><div className="mx-3 my-1 border-t border-slate-100"/><button role="menuitem" onClick={()=>{setProfileOpen(false);onSignOut()}} className="flex h-11 w-full items-center gap-3 rounded-2xl px-3 text-sm text-rose-500 transition hover:bg-rose-50"><LogOut size={17}/>退出登录</button></>}</motion.div>}</AnimatePresence></div></header>
+  const roleLabel=accessRole==='super_admin'?'超级管理员':accessRole==='admin'?'管理员':'普通用户'
+  return <header className="sticky top-0 z-40 px-3 pt-3 sm:px-5">
+    {profileOpen&&<button aria-label="关闭个人菜单" onClick={()=>setProfileOpen(false)} className="fixed inset-0 z-30 cursor-default"/>}
+    <div className="relative z-40 mx-auto flex min-h-16 max-w-[1680px] items-center gap-3 rounded-[24px] border border-white bg-white/90 px-3 py-2 shadow-[0_14px_45px_rgba(54,84,72,0.08)] backdrop-blur-xl sm:px-5">
+      <button aria-label="打开导航" onClick={openMenu} className="grid size-10 place-items-center rounded-2xl hover:bg-slate-100 lg:hidden"><Menu size={20}/></button>
+      <div className="relative mx-auto w-full max-w-xl"><Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={18}/><input value={search} onChange={e=>setSearch(e.target.value)} placeholder="搜索项目、内容、数据..." className="h-11 w-full rounded-2xl border border-slate-100 bg-[#f7f9f7] pl-11 pr-4 text-sm outline-none transition focus:border-emerald-200 focus:ring-4 focus:ring-emerald-50"/></div>
+      <motion.button aria-label="通知" whileHover={{scale:1.06}} className="relative grid size-11 shrink-0 place-items-center rounded-2xl border border-slate-100 bg-white text-slate-600"><Bell size={19}/><i className={`absolute right-2 top-2 size-2 rounded-full ring-2 ring-white ${cloud?'bg-[#76c853]':'bg-amber-400'}`}/></motion.button>
+      <button onClick={()=>setProfileOpen(open=>!open)} aria-expanded={profileOpen} aria-haspopup="menu" className={`hidden min-w-[190px] items-center gap-3 rounded-2xl px-2 py-1.5 transition sm:flex ${profileOpen?'bg-[#f3f7f1]':'hover:bg-slate-50'}`}><ProfileAvatar profile={profile}/><span className="min-w-0 text-left"><b className="block truncate text-sm">{profile.displayName}</b><small className="mt-0.5 block text-[11px] text-slate-400">{roleLabel}</small></span><motion.span className="ml-auto text-slate-400" animate={{rotate:profileOpen?180:0}}><ChevronDown size={15}/></motion.span></button>
+      <AnimatePresence>{profileOpen&&<motion.div role="menu" aria-label="个人中心" initial={{opacity:0,y:-8,scale:.98}} animate={{opacity:1,y:0,scale:1}} exit={{opacity:0,y:-6,scale:.98}} className="absolute right-3 top-[calc(100%+10px)] z-50 w-72 overflow-hidden rounded-3xl border border-white bg-white p-2 shadow-[0_24px_70px_rgba(40,65,50,0.18)] sm:right-5"><div className="flex items-center gap-3 p-3"><ProfileAvatar profile={profile}/><div className="min-w-0"><b className="block truncate text-sm">{profile.displayName}</b><span className="text-[11px] text-slate-400">{roleLabel} · {profile.jobTitle}</span></div></div><div className="mx-2 mb-2 flex items-center justify-between rounded-2xl bg-[#f4f8f2] px-3 py-2.5 text-xs"><span className="flex items-center gap-2 text-slate-500"><Database size={15}/>Supabase 云端</span><b className={`flex items-center gap-1 ${cloud?'text-emerald-600':'text-amber-600'}`}><CheckCircle2 size={14}/>{cloud?'已连接':'本地模式'}</b></div><button role="menuitem" onClick={()=>{setProfileOpen(false);onOpenSettings()}} className="flex h-11 w-full items-center gap-3 rounded-2xl px-3 text-sm text-slate-600 transition hover:bg-[#f4f7f2]"><Settings size={17}/>个人账号设置</button>{cloud&&<><div className="mx-3 my-1 border-t border-slate-100"/><button role="menuitem" onClick={()=>{setProfileOpen(false);onSignOut()}} className="flex h-11 w-full items-center gap-3 rounded-2xl px-3 text-sm text-rose-500 transition hover:bg-rose-50"><LogOut size={17}/>退出登录</button></>}</motion.div>}</AnimatePresence>
+    </div>
+  </header>
 }
 
 function PageHead({eyebrow,title,desc,action}:{eyebrow:string;title:string;desc:string;action?:React.ReactNode}){
   return <div className="mb-6 flex flex-col justify-between gap-4 sm:flex-row sm:items-end"><div><p className="text-xs font-semibold uppercase tracking-[.16em] text-[#67a756]">{eyebrow}</p><h1 className="mt-2 text-3xl font-semibold tracking-[-.03em] text-slate-950 sm:text-4xl">{title}</h1><p className="mt-2 text-sm text-slate-500">{desc}</p></div>{action}</div>
 }
 
-function Dashboard({entries,brands,chartData,totals}:any){
+function Dashboard({entries,brands,totals}:any){
   const [trendRange,setTrendRange]=useState<'week'|'month'|'year'>('month')
   const rangeChartData=useMemo(()=>{
     const typed=entries as MetricEntry[]
-    const latest=[new Date().toLocaleDateString('en-CA'),...typed.map(entry=>entry.date)].sort().pop()!
+    const dates=typed.map(entry=>entry.date).sort()
+    const latest=dates[dates.length-1]||dateKey(new Date())
     const reference=new Date(`${latest}T12:00:00`)
-    let filtered=typed
+    const bucket=(key:string,label:string,match:(entry:MetricEntry)=>boolean)=>{
+      const rows=typed.filter(match)
+      return {
+        date:label,
+        aViews:rows.filter(entry=>entry.brand==='brandA').reduce((sum,entry)=>sum+entry.views,0),
+        bViews:rows.filter(entry=>entry.brand==='brandB').reduce((sum,entry)=>sum+entry.views,0),
+        key,
+      }
+    }
     if(trendRange==='week'){
-      const day=(reference.getDay()+6)%7,start=new Date(reference),end=new Date(reference)
-      start.setDate(reference.getDate()-day);end.setDate(start.getDate()+6)
-      const startKey=start.toLocaleDateString('en-CA'),endKey=end.toLocaleDateString('en-CA')
-      filtered=typed.filter(entry=>entry.date>=startKey&&entry.date<=endKey)
-    }else if(trendRange==='month') filtered=typed.filter(entry=>entry.date.startsWith(latest.slice(0,7)))
-    else filtered=typed.filter(entry=>entry.date.startsWith(latest.slice(0,4)))
-    const keys=Array.from(new Set(filtered.map(entry=>trendRange==='year'?entry.date.slice(0,7):entry.date))).sort()
-    return keys.map(key=>{
-      const rows=filtered.filter(entry=>(trendRange==='year'?entry.date.slice(0,7):entry.date)===key)
-      return {date:trendRange==='year'?`${Number(key.slice(5))}月`:`${Number(key.slice(8))}日`,aViews:rows.filter(entry=>entry.brand==='brandA').reduce((sum,entry)=>sum+entry.views,0),bViews:rows.filter(entry=>entry.brand==='brandB').reduce((sum,entry)=>sum+entry.views,0)}
+      const weekday=(reference.getDay()+6)%7
+      const monday=new Date(reference)
+      monday.setDate(reference.getDate()-weekday)
+      return Array.from({length:7},(_,index)=>{
+        const current=new Date(monday)
+        current.setDate(monday.getDate()+index)
+        const key=dateKey(current)
+        return bucket(key,`${current.getMonth()+1}/${current.getDate()}`,entry=>entry.date===key)
+      })
+    }
+    if(trendRange==='month'){
+      const year=reference.getFullYear(),month=reference.getMonth()
+      const days=new Date(year,month+1,0).getDate()
+      return Array.from({length:days},(_,index)=>{
+        const current=new Date(year,month,index+1,12)
+        const key=dateKey(current)
+        return bucket(key,`${index+1}日`,entry=>entry.date===key)
+      })
+    }
+    const year=reference.getFullYear()
+    return Array.from({length:12},(_,index)=>{
+      const key=`${year}-${String(index+1).padStart(2,'0')}`
+      return bucket(key,`${index+1}月`,entry=>entry.date.startsWith(key))
     })
   },[entries,trendRange])
   const rangeLabel={week:'本周',month:'本月',year:'本年'}[trendRange]
@@ -244,6 +302,7 @@ function RecentTable({entries,brands}:{entries:MetricEntry[];brands:BrandConfig}
 function WorkPlan(){
   const [planView,setPlanView]=useState<'month'|'week'>('month')
   const [createOpen,setCreateOpen]=useState(false)
+  const [selectedPlan,setSelectedPlan]=useState<DetailData|null>(null)
   const [planForm,setPlanForm]=useState({title:'',summary:'',brand:'创艺装饰',period:'month',date:''})
   const [customPlans,setCustomPlans]=useState<Array<{id?:string;title:string;summary?:string;brand?:string;period:string;date:string}>>(()=>stored('brandflow-plans',[]))
   useEffect(()=>{if(isSupabaseConfigured)plansDb.list().then((rows:any)=>setCustomPlans(rows.map((row:any)=>({id:row.id,title:row.title,summary:row.summary,brand:row.brands?.name,period:row.period,date:row.due_date||''})))).catch(()=>{})},[])
@@ -258,42 +317,46 @@ function WorkPlan(){
   const switcher=<div className="flex rounded-2xl border border-white bg-white p-1 shadow-sm">{([['month','月度计划'],['week','周计划']] as const).map(([id,label])=><motion.button key={id} whileTap={{scale:.97}} onClick={()=>setPlanView(id)} className={`h-9 rounded-xl px-4 text-sm font-semibold transition ${planView===id?'bg-[#dff2d6] text-[#39713c] shadow-sm':'text-slate-400 hover:text-slate-700'}`}>{label}</motion.button>)}</div>
   const addPlan=async(event:React.FormEvent)=>{event.preventDefault();const item={...planForm};if(isSupabaseConfigured){const row:any=await plansDb.create({brandCode:planForm.brand==='喜客喜装饰'?'brandB':'brandA',title:planForm.title,summary:planForm.summary,period:planForm.period,due_date:planForm.date});item.title=row.title}setCustomPlans([{...item},...customPlans]);setCreateOpen(false);setPlanForm({title:'',summary:'',brand:'创艺装饰',period:'month',date:''})}
   return <><PageHead eyebrow="Work Plan" title="工作计划" desc="月度计划确定阶段目标，周计划负责具体任务执行。" action={<div className="flex flex-wrap items-center gap-3">{switcher}<motion.button onClick={()=>setCreateOpen(true)} whileHover={{y:-2}} whileTap={{scale:.97}} className="flex h-11 items-center gap-2 rounded-2xl bg-[#8dcc65] px-5 text-sm font-semibold text-white shadow-lg shadow-lime-200"><Plus size={17}/>新建计划</motion.button></div>}/>
-    {customPlans.length>0&&<motion.div initial={{opacity:0,y:-8}} animate={{opacity:1,y:0}} className="mb-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-3">{customPlans.map((plan,index)=><Card key={`${plan.title}-${index}`} className="flex items-start gap-4 p-4"><span className="grid size-11 shrink-0 place-items-center rounded-2xl bg-[#e5f3dd] text-[#5e9950]"><CalendarDays size={19}/></span><div className="min-w-0"><b className="block truncate text-sm">{plan.title}</b>{plan.summary&&<p className="mt-1 line-clamp-2 text-xs leading-5 text-slate-500">{plan.summary}</p>}<span className="mt-2 block text-[11px] text-slate-400">{plan.brand&&`${plan.brand} · `}{plan.period==='month'?'月度计划':'周计划'} · {plan.date||'待定时间'}</span></div></Card>)}</motion.div>}
+    {customPlans.length>0&&<motion.div initial={{opacity:0,y:-8}} animate={{opacity:1,y:0}} className="mb-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-3">{customPlans.map((plan,index)=><Card key={`${plan.title}-${index}`} onClick={()=>setSelectedPlan({title:plan.title,category:plan.period==='month'?'月度计划':'周计划',description:plan.summary,fields:[['所属品牌',plan.brand||'未指定'],['完成日期',plan.date||'待定']]})} ariaLabel={`查看计划 ${plan.title}`} className="flex items-start gap-4 p-4"><span className="grid size-11 shrink-0 place-items-center rounded-2xl bg-[#e5f3dd] text-[#5e9950]"><CalendarDays size={19}/></span><div className="min-w-0"><b className="block truncate text-sm">{plan.title}</b>{plan.summary&&<p className="mt-1 line-clamp-2 text-xs leading-5 text-slate-500">{plan.summary}</p>}<span className="mt-2 block text-[11px] text-slate-400">{plan.brand&&`${plan.brand} · `}{plan.period==='month'?'月度计划':'周计划'} · {plan.date||'待定时间'}</span></div></Card>)}</motion.div>}
     <AnimatePresence mode="wait">
       {planView==='month'?<motion.div key="month" variants={gridMotion} initial="hidden" animate="show" exit={{opacity:0,y:-8}}><div className="mb-4 grid gap-4 sm:grid-cols-3"><Card className="p-5"><p className="text-xs text-slate-400">本月目标</p><strong className="mt-2 block text-2xl">双品牌内容稳定更新</strong></Card><Card className="p-5"><p className="text-xs text-slate-400">计划完成度</p><strong className="mt-2 block text-3xl">56%</strong><div className="mt-4 h-2 overflow-hidden rounded-full bg-[#edf2eb]"><motion.div initial={{width:0}} animate={{width:'56%'}} className="h-full rounded-full bg-[#8dcc65]"/></div></Card><Card className="p-5"><p className="text-xs text-slate-400">本月安排</p><div className="mt-3 flex gap-6"><div><b className="block text-2xl">16</b><span className="text-xs text-slate-400">项任务</span></div><div><b className="block text-2xl">8</b><span className="text-xs text-slate-400">条内容</span></div></div></Card></div><div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">{monthWeeks.map(([week,focus,tasks,progress],index)=><Card key={week} className="min-h-[330px] p-5"><div className="flex items-center justify-between"><span className="text-xs font-semibold text-[#67a756]">{week}</span><span className={`rounded-full px-2.5 py-1 text-[10px] ${progress===100?'bg-emerald-50 text-emerald-700':index===1?'bg-sky-50 text-sky-600':'bg-slate-50 text-slate-500'}`}>{progress===100?'已完成':index===1?'进行中':'待开始'}</span></div><h2 className="mt-5 text-lg font-semibold">{focus}</h2><div className="mt-5 space-y-3">{tasks.map(task=><div key={task} className="flex gap-3 rounded-2xl bg-[#f7f9f6] p-3 text-sm leading-6"><CircleDashed size={16} className="mt-1 shrink-0 text-[#80ba65]"/>{task}</div>)}</div><div className="mt-6 flex items-center gap-3"><div className="h-2 flex-1 overflow-hidden rounded-full bg-[#edf2eb]"><motion.div initial={{width:0}} animate={{width:`${progress}%`}} className="h-full rounded-full bg-[#8dcc65]"/></div><span className="text-xs font-semibold text-slate-400">{progress}%</span></div></Card>)}</div></motion.div>:<motion.div key="week" variants={gridMotion} initial="hidden" animate="show" exit={{opacity:0,y:-8}} className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">{weekGroups.map(([name,items],index)=><Card key={name} className="min-h-[430px] bg-white/75 p-4"><div className="flex items-center justify-between px-1 py-2"><h2 className="flex items-center gap-2 font-semibold"><i className={`size-2 rounded-full ${index===0?'bg-slate-300':index===1?'bg-sky-400':index===2?'bg-amber-400':'bg-[#8dcc65]'}`}/>{name}</h2><span className="rounded-full bg-[#f2f6ef] px-2 py-1 text-xs text-slate-500">{items.length}</span></div><div className="mt-3 space-y-3">{items.map((item,i)=><motion.article whileHover={{y:-3}} key={item} className="rounded-2xl border border-slate-100 bg-white p-4 shadow-sm"><span className="text-[10px] font-semibold text-[#67a756]">{i%2?'内容运营':'品牌项目'}</span><h3 className="mt-2 text-sm font-semibold leading-6">{item}</h3><div className="mt-5 flex items-center justify-between text-xs text-slate-400"><span className="grid size-7 place-items-center rounded-full bg-[#e5f3dd] font-bold text-[#5d8d52]">{i%2?'文':'设'}</span><time>本周{index+i+1}日</time></div></motion.article>)}</div></Card>)}</motion.div>}
     </AnimatePresence>
     <CreatePanel open={createOpen} onClose={()=>setCreateOpen(false)} title="新建视频计划" desc="先确定要做什么视频，再补充主要内容与执行周期。"><form onSubmit={addPlan} className="space-y-4"><Field label="视频主题"><input required value={planForm.title} onChange={e=>setPlanForm({...planForm,title:e.target.value})} placeholder="例如：第一次装修最容易踩的 5 个坑"/></Field><label className="block text-xs font-medium text-slate-500">大致内容<textarea required value={planForm.summary} onChange={e=>setPlanForm({...planForm,summary:e.target.value})} className="mt-2 min-h-28 w-full resize-none rounded-2xl border border-slate-100 bg-[#f8faf7] p-4 text-sm outline-none transition focus:border-emerald-200 focus:ring-4 focus:ring-emerald-50" placeholder="简单写明视频准备讲什么、主要画面和表达重点"/></label><div className="grid gap-4 sm:grid-cols-2"><Field label="所属品牌"><select value={planForm.brand} onChange={e=>setPlanForm({...planForm,brand:e.target.value})}><option>创艺装饰</option><option>喜客喜装饰</option></select></Field><Field label="计划周期"><select value={planForm.period} onChange={e=>setPlanForm({...planForm,period:e.target.value})}><option value="month">月度计划</option><option value="week">周计划</option></select></Field></div><Field label="计划完成日期"><input type="date" required value={planForm.date} onChange={e=>setPlanForm({...planForm,date:e.target.value})}/></Field><SubmitButton label="保存计划"/></form></CreatePanel>
+    <DetailPanel detail={selectedPlan} onClose={()=>setSelectedPlan(null)}/>
   </>
 }
 
 function ProjectCenter(){
   const [createOpen,setCreateOpen]=useState(false)
+  const [selectedProject,setSelectedProject]=useState<DetailData|null>(null)
   const [projectForm,setProjectForm]=useState({title:'',type:'品牌视频',brand:'创艺装饰',owner:'',desc:'',date:''})
-  const [projects,setProjects]=useState<Array<[string,string,string,number,string?,string?]>>(()=>stored('brandflow-projects',[['/assets/project-home.jpg','嗨，我的新家','品牌视频',76],['/assets/finished-home.jpg','云上九州 128㎡','完工案例',92],['/assets/site-safety.jpg','观山湖工地日记','内容栏目',48],['/assets/content-team.jpg','设计师人物栏目','长期栏目',34]]))
-  useEffect(()=>{if(isSupabaseConfigured)projectsDb.list().then((rows:any)=>setProjects(rows.map((row:any)=>[row.cover_url||'/assets/project-home.jpg',row.name,row.project_type,Number(row.progress),row.description||'',row.due_date||'']))).catch(()=>{})},[])
+  const [projects,setProjects]=useState<Array<[string,string,string,number,string?,string?,string?,string?]>>(()=>stored('brandflow-projects',[['/assets/project-home.jpg','嗨，我的新家','品牌视频',76],['/assets/finished-home.jpg','云上九州 128㎡','完工案例',92],['/assets/site-safety.jpg','观山湖工地日记','内容栏目',48],['/assets/content-team.jpg','设计师人物栏目','长期栏目',34]]))
+  useEffect(()=>{if(isSupabaseConfigured)projectsDb.list().then((rows:any)=>setProjects(rows.map((row:any)=>[row.cover_url||'/assets/project-home.jpg',row.name,row.project_type,Number(row.progress),row.description||'',row.due_date||'',row.owner_name||'',row.brands?.name||'']))).catch(()=>{})},[])
   useEffect(()=>{if(!isSupabaseConfigured)localStorage.setItem('brandflow-projects',JSON.stringify(projects))},[projects])
-  const addProject=async(event:React.FormEvent)=>{event.preventDefault();if(isSupabaseConfigured)await projectsDb.create({brandCode:projectForm.brand==='喜客喜装饰'?'brandB':'brandA',name:projectForm.title,project_type:projectForm.type,owner_name:projectForm.owner,description:projectForm.desc,due_date:projectForm.date,cover_url:'/assets/project-home.jpg'});setProjects([['/assets/project-home.jpg',projectForm.title,projectForm.type,0,projectForm.desc,projectForm.date],...projects]);setCreateOpen(false);setProjectForm({title:'',type:'品牌视频',brand:'创艺装饰',owner:'',desc:'',date:''})}
-  return <><PageHead eyebrow="Project Center" title="项目中心" desc="统一管理品牌视频、客户案例和长期内容栏目。" action={<motion.button onClick={()=>setCreateOpen(true)} whileHover={{y:-2}} whileTap={{scale:.97}} className="flex h-11 items-center gap-2 rounded-2xl bg-[#8dcc65] px-5 text-sm font-semibold text-white shadow-lg shadow-lime-200"><Plus size={17}/>新建项目</motion.button>}/><motion.div variants={gridMotion} initial="hidden" animate="show" className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">{projects.map(([src,title,type,progress,desc,date],index)=><Card key={`${title}-${index}`} className="overflow-hidden"><div className="aspect-[16/10] overflow-hidden"><motion.img whileHover={{scale:1.04}} src={src} alt={title} className="h-full w-full object-cover"/></div><div className="p-5"><div className="flex items-center justify-between"><span className="text-[10px] font-semibold uppercase tracking-wider text-[#67a756]">{type}</span><span className="rounded-full bg-emerald-50 px-2.5 py-1 text-[10px] text-emerald-700">{progress===0?'待开始':'进行中'}</span></div><h3 className="mt-4 text-lg font-semibold">{title}</h3>{desc&&<p className="mt-2 line-clamp-2 text-xs leading-5 text-slate-500">{desc}</p>}{date&&<p className="mt-3 text-[11px] text-slate-400">计划交付 · {date}</p>}<div className="mt-6 flex justify-between text-xs text-slate-400"><span>完成度</span><b className="text-slate-700">{progress}%</b></div><div className="mt-2 h-2 rounded-full bg-[#edf2eb]"><motion.div initial={{width:0}} animate={{width:`${progress}%`}} className="h-full rounded-full bg-[#8dcc65]"/></div></div></Card>)}</motion.div><CreatePanel open={createOpen} onClose={()=>setCreateOpen(false)} title="新建项目" desc="项目用于管理一组有共同目标的计划、内容和素材。"><form onSubmit={addProject} className="space-y-4"><Field label="项目名称"><input required value={projectForm.title} onChange={e=>setProjectForm({...projectForm,title:e.target.value})} placeholder="例如：创艺品牌片第二季"/></Field><label className="block text-xs font-medium text-slate-500">项目目标与范围<textarea required value={projectForm.desc} onChange={e=>setProjectForm({...projectForm,desc:e.target.value})} className="mt-2 min-h-24 w-full resize-none rounded-2xl border border-slate-100 bg-[#f8faf7] p-4 text-sm outline-none transition focus:border-emerald-200 focus:ring-4 focus:ring-emerald-50" placeholder="说明项目要解决什么、包含哪些交付内容"/></label><div className="grid gap-4 sm:grid-cols-2"><Field label="所属品牌"><select value={projectForm.brand} onChange={e=>setProjectForm({...projectForm,brand:e.target.value})}><option>创艺装饰</option><option>喜客喜装饰</option></select></Field><Field label="项目类型"><select value={projectForm.type} onChange={e=>setProjectForm({...projectForm,type:e.target.value})}><option>品牌视频</option><option>完工案例</option><option>内容栏目</option><option>长期栏目</option></select></Field></div><div className="grid gap-4 sm:grid-cols-2"><Field label="负责人"><input required value={projectForm.owner} onChange={e=>setProjectForm({...projectForm,owner:e.target.value})} placeholder="例如：内容运营"/></Field><Field label="计划交付日期"><input required type="date" value={projectForm.date} onChange={e=>setProjectForm({...projectForm,date:e.target.value})}/></Field></div><SubmitButton label="创建项目"/></form></CreatePanel></>
+  const addProject=async(event:React.FormEvent)=>{event.preventDefault();if(isSupabaseConfigured)await projectsDb.create({brandCode:projectForm.brand==='喜客喜装饰'?'brandB':'brandA',name:projectForm.title,project_type:projectForm.type,owner_name:projectForm.owner,description:projectForm.desc,due_date:projectForm.date,cover_url:'/assets/project-home.jpg'});setProjects([['/assets/project-home.jpg',projectForm.title,projectForm.type,0,projectForm.desc,projectForm.date,projectForm.owner,projectForm.brand],...projects]);setCreateOpen(false);setProjectForm({title:'',type:'品牌视频',brand:'创艺装饰',owner:'',desc:'',date:''})}
+  return <><PageHead eyebrow="Project Center" title="项目中心" desc="统一管理品牌视频、客户案例和长期内容栏目。" action={<motion.button onClick={()=>setCreateOpen(true)} whileHover={{y:-2}} whileTap={{scale:.97}} className="flex h-11 items-center gap-2 rounded-2xl bg-[#8dcc65] px-5 text-sm font-semibold text-white shadow-lg shadow-lime-200"><Plus size={17}/>新建项目</motion.button>}/><motion.div variants={gridMotion} initial="hidden" animate="show" className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">{projects.map(([src,title,type,progress,desc,date,owner,brand],index)=><Card key={`${title}-${index}`} onClick={()=>setSelectedProject({title,category:type,description:desc,image:src,fields:[['所属品牌',brand||'未指定'],['负责人',owner||'未指定'],['计划交付',date||'待定'],['完成度',`${progress}%`],['项目状态',progress===0?'待开始':progress>=100?'已完成':'进行中']]})} ariaLabel={`查看项目 ${title}`} className="overflow-hidden"><div className="aspect-[16/10] overflow-hidden"><motion.img whileHover={{scale:1.04}} src={src} alt={title} className="h-full w-full object-cover"/></div><div className="p-5"><div className="flex items-center justify-between"><span className="text-[10px] font-semibold uppercase tracking-wider text-[#67a756]">{type}</span><span className="rounded-full bg-emerald-50 px-2.5 py-1 text-[10px] text-emerald-700">{progress===0?'待开始':'进行中'}</span></div><h3 className="mt-4 text-lg font-semibold">{title}</h3>{desc&&<p className="mt-2 line-clamp-2 text-xs leading-5 text-slate-500">{desc}</p>}{date&&<p className="mt-3 text-[11px] text-slate-400">计划交付 · {date}</p>}<div className="mt-6 flex justify-between text-xs text-slate-400"><span>完成度</span><b className="text-slate-700">{progress}%</b></div><div className="mt-2 h-2 rounded-full bg-[#edf2eb]"><motion.div initial={{width:0}} animate={{width:`${progress}%`}} className="h-full rounded-full bg-[#8dcc65]"/></div></div></Card>)}</motion.div><CreatePanel open={createOpen} onClose={()=>setCreateOpen(false)} title="新建项目" desc="项目用于管理一组有共同目标的计划、内容和素材。"><form onSubmit={addProject} className="space-y-4"><Field label="项目名称"><input required value={projectForm.title} onChange={e=>setProjectForm({...projectForm,title:e.target.value})} placeholder="例如：创艺品牌片第二季"/></Field><label className="block text-xs font-medium text-slate-500">项目目标与范围<textarea required value={projectForm.desc} onChange={e=>setProjectForm({...projectForm,desc:e.target.value})} className="mt-2 min-h-24 w-full resize-none rounded-2xl border border-slate-100 bg-[#f8faf7] p-4 text-sm outline-none transition focus:border-emerald-200 focus:ring-4 focus:ring-emerald-50" placeholder="说明项目要解决什么、包含哪些交付内容"/></label><div className="grid gap-4 sm:grid-cols-2"><Field label="所属品牌"><select value={projectForm.brand} onChange={e=>setProjectForm({...projectForm,brand:e.target.value})}><option>创艺装饰</option><option>喜客喜装饰</option></select></Field><Field label="项目类型"><select value={projectForm.type} onChange={e=>setProjectForm({...projectForm,type:e.target.value})}><option>品牌视频</option><option>完工案例</option><option>内容栏目</option><option>长期栏目</option></select></Field></div><div className="grid gap-4 sm:grid-cols-2"><Field label="负责人"><input required value={projectForm.owner} onChange={e=>setProjectForm({...projectForm,owner:e.target.value})} placeholder="例如：内容运营"/></Field><Field label="计划交付日期"><input required type="date" value={projectForm.date} onChange={e=>setProjectForm({...projectForm,date:e.target.value})}/></Field></div><SubmitButton label="创建项目"/></form></CreatePanel><DetailPanel detail={selectedProject} onClose={()=>setSelectedProject(null)}/></>
 }
 
 function ContentCenter(){
   const [createOpen,setCreateOpen]=useState(false)
+  const [selectedContent,setSelectedContent]=useState<DetailData|null>(null)
   const [contentForm,setContentForm]=useState({title:'',brand:'创艺装饰',channel:'抖音',state:'脚本中',format:'短视频',outline:'',date:''})
-  const [content,setContent]=useState<Array<[string,string,string,string,string?]>>(()=>stored('brandflow-content',[['/assets/content-video.jpg','装修不是选择题','待审核','抖音'],['/assets/site-safety.jpg','看不见的工程，也有标准','剪辑中','视频号'],['/assets/content-team.jpg','设计师如何听懂你的生活','已发布','小红书'],['/assets/finished-home.jpg','新家交付的第一天','脚本中','抖音']]))
-  useEffect(()=>{if(isSupabaseConfigured)contentsDb.list().then((rows:any)=>setContent(rows.map((row:any)=>[row.cover_url||'/assets/content-video.jpg',row.title,row.status,row.channel,row.summary||'']))).catch(()=>{})},[])
+  const [content,setContent]=useState<Array<[string,string,string,string,string?,string?,string?,string?]>>(()=>stored('brandflow-content',[['/assets/content-video.jpg','装修不是选择题','待审核','抖音'],['/assets/site-safety.jpg','看不见的工程，也有标准','剪辑中','视频号'],['/assets/content-team.jpg','设计师如何听懂你的生活','已发布','小红书'],['/assets/finished-home.jpg','新家交付的第一天','脚本中','抖音']]))
+  useEffect(()=>{if(isSupabaseConfigured)contentsDb.list().then((rows:any)=>setContent(rows.map((row:any)=>[row.cover_url||'/assets/content-video.jpg',row.title,row.status,row.channel,row.summary||'',row.content_format||'',row.planned_publish_date||'',row.brands?.name||'']))).catch(()=>{})},[])
   useEffect(()=>{if(!isSupabaseConfigured)localStorage.setItem('brandflow-content',JSON.stringify(content))},[content])
-  const addContent=async(event:React.FormEvent)=>{event.preventDefault();if(isSupabaseConfigured)await contentsDb.create({brandCode:contentForm.brand==='喜客喜装饰'?'brandB':'brandA',title:contentForm.title,summary:contentForm.outline,content_format:contentForm.format,channel:contentForm.channel,status:contentForm.state,planned_publish_date:contentForm.date,cover_url:'/assets/content-video.jpg'});setContent([['/assets/content-video.jpg',contentForm.title,contentForm.state,contentForm.channel,contentForm.outline],...content]);setCreateOpen(false);setContentForm({title:'',brand:'创艺装饰',channel:'抖音',state:'脚本中',format:'短视频',outline:'',date:''})}
-  return <><PageHead eyebrow="Content Center" title="内容中心" desc="管理选题、脚本、拍摄、剪辑、发布与复盘；优秀作品和原始文件统一归档到素材中心。" action={<motion.button onClick={()=>setCreateOpen(true)} whileHover={{y:-2}} whileTap={{scale:.97}} className="flex h-11 items-center gap-2 rounded-2xl bg-[#8dcc65] px-5 text-sm font-semibold text-white shadow-lg shadow-lime-200"><Plus size={17}/>创建内容</motion.button>}/><motion.div variants={gridMotion} initial="hidden" animate="show" className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">{content.map(([src,title,state,channel,outline],index)=><Card key={`${title}-${index}`} className="overflow-hidden"><div className="relative aspect-video overflow-hidden"><motion.img whileHover={{scale:1.05}} src={src} alt={title} className="h-full w-full object-cover"/><span className="absolute bottom-3 right-3 rounded-xl bg-slate-950/65 px-2 py-1 text-[10px] text-white">00:58</span></div><div className="p-5"><div className="flex justify-between text-xs"><span className="rounded-full bg-[#eaf5e5] px-2.5 py-1 font-medium text-[#548448]">{state}</span><span className="text-slate-400">{channel}</span></div><h3 className="mt-4 font-semibold leading-6">{title}</h3>{outline&&<p className="mt-2 line-clamp-2 text-xs leading-5 text-slate-500">{outline}</p>}<p className="mt-5 text-xs text-slate-400">本周更新 · 12.4k 浏览</p></div></Card>)}</motion.div><CreatePanel open={createOpen} onClose={()=>setCreateOpen(false)} title="创建内容" desc="单条内容从选题开始，进入脚本、拍摄、剪辑和发布流程。"><form onSubmit={addContent} className="space-y-4"><Field label="内容标题"><input required value={contentForm.title} onChange={e=>setContentForm({...contentForm,title:e.target.value})} placeholder="输入视频或图文标题"/></Field><label className="block text-xs font-medium text-slate-500">内容概要<textarea required value={contentForm.outline} onChange={e=>setContentForm({...contentForm,outline:e.target.value})} className="mt-2 min-h-24 w-full resize-none rounded-2xl border border-slate-100 bg-[#f8faf7] p-4 text-sm outline-none transition focus:border-emerald-200 focus:ring-4 focus:ring-emerald-50" placeholder="说明这条内容讲什么、核心看点和主要画面"/></label><div className="grid gap-4 sm:grid-cols-2"><Field label="所属品牌"><select value={contentForm.brand} onChange={e=>setContentForm({...contentForm,brand:e.target.value})}><option>创艺装饰</option><option>喜客喜装饰</option></select></Field><Field label="内容形式"><select value={contentForm.format} onChange={e=>setContentForm({...contentForm,format:e.target.value})}><option>短视频</option><option>图文</option><option>直播切片</option><option>长视频</option></select></Field></div><div className="grid gap-4 sm:grid-cols-2"><Field label="发布平台"><select value={contentForm.channel} onChange={e=>setContentForm({...contentForm,channel:e.target.value})}><option>抖音</option><option>视频号</option><option>小红书</option></select></Field><Field label="当前阶段"><select value={contentForm.state} onChange={e=>setContentForm({...contentForm,state:e.target.value})}><option>脚本中</option><option>拍摄中</option><option>剪辑中</option><option>待审核</option></select></Field></div><Field label="计划发布日期"><input required type="date" value={contentForm.date} onChange={e=>setContentForm({...contentForm,date:e.target.value})}/></Field><SubmitButton label="创建内容"/></form></CreatePanel></>
+  const addContent=async(event:React.FormEvent)=>{event.preventDefault();if(isSupabaseConfigured)await contentsDb.create({brandCode:contentForm.brand==='喜客喜装饰'?'brandB':'brandA',title:contentForm.title,summary:contentForm.outline,content_format:contentForm.format,channel:contentForm.channel,status:contentForm.state,planned_publish_date:contentForm.date,cover_url:'/assets/content-video.jpg'});setContent([['/assets/content-video.jpg',contentForm.title,contentForm.state,contentForm.channel,contentForm.outline,contentForm.format,contentForm.date,contentForm.brand],...content]);setCreateOpen(false);setContentForm({title:'',brand:'创艺装饰',channel:'抖音',state:'脚本中',format:'短视频',outline:'',date:''})}
+  return <><PageHead eyebrow="Content Center" title="内容中心" desc="管理选题、脚本、拍摄、剪辑、发布与复盘；优秀作品和原始文件统一归档到素材中心。" action={<motion.button onClick={()=>setCreateOpen(true)} whileHover={{y:-2}} whileTap={{scale:.97}} className="flex h-11 items-center gap-2 rounded-2xl bg-[#8dcc65] px-5 text-sm font-semibold text-white shadow-lg shadow-lime-200"><Plus size={17}/>创建内容</motion.button>}/><motion.div variants={gridMotion} initial="hidden" animate="show" className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">{content.map(([src,title,state,channel,outline,format,date,brand],index)=><Card key={`${title}-${index}`} onClick={()=>setSelectedContent({title,category:format||'内容',description:outline,image:src,fields:[['所属品牌',brand||'未指定'],['发布平台',channel],['当前阶段',state],['计划发布',date||'待定']]})} ariaLabel={`查看内容 ${title}`} className="overflow-hidden"><div className="relative aspect-video overflow-hidden"><motion.img whileHover={{scale:1.05}} src={src} alt={title} className="h-full w-full object-cover"/><span className="absolute bottom-3 right-3 rounded-xl bg-slate-950/65 px-2 py-1 text-[10px] text-white">00:58</span></div><div className="p-5"><div className="flex justify-between text-xs"><span className="rounded-full bg-[#eaf5e5] px-2.5 py-1 font-medium text-[#548448]">{state}</span><span className="text-slate-400">{channel}</span></div><h3 className="mt-4 font-semibold leading-6">{title}</h3>{outline&&<p className="mt-2 line-clamp-2 text-xs leading-5 text-slate-500">{outline}</p>}<p className="mt-5 text-xs text-slate-400">本周更新 · 12.4k 浏览</p></div></Card>)}</motion.div><CreatePanel open={createOpen} onClose={()=>setCreateOpen(false)} title="创建内容" desc="单条内容从选题开始，进入脚本、拍摄、剪辑和发布流程。"><form onSubmit={addContent} className="space-y-4"><Field label="内容标题"><input required value={contentForm.title} onChange={e=>setContentForm({...contentForm,title:e.target.value})} placeholder="输入视频或图文标题"/></Field><label className="block text-xs font-medium text-slate-500">内容概要<textarea required value={contentForm.outline} onChange={e=>setContentForm({...contentForm,outline:e.target.value})} className="mt-2 min-h-24 w-full resize-none rounded-2xl border border-slate-100 bg-[#f8faf7] p-4 text-sm outline-none transition focus:border-emerald-200 focus:ring-4 focus:ring-emerald-50" placeholder="说明这条内容讲什么、核心看点和主要画面"/></label><div className="grid gap-4 sm:grid-cols-2"><Field label="所属品牌"><select value={contentForm.brand} onChange={e=>setContentForm({...contentForm,brand:e.target.value})}><option>创艺装饰</option><option>喜客喜装饰</option></select></Field><Field label="内容形式"><select value={contentForm.format} onChange={e=>setContentForm({...contentForm,format:e.target.value})}><option>短视频</option><option>图文</option><option>直播切片</option><option>长视频</option></select></Field></div><div className="grid gap-4 sm:grid-cols-2"><Field label="发布平台"><select value={contentForm.channel} onChange={e=>setContentForm({...contentForm,channel:e.target.value})}><option>抖音</option><option>视频号</option><option>小红书</option></select></Field><Field label="当前阶段"><select value={contentForm.state} onChange={e=>setContentForm({...contentForm,state:e.target.value})}><option>脚本中</option><option>拍摄中</option><option>剪辑中</option><option>待审核</option></select></Field></div><Field label="计划发布日期"><input required type="date" value={contentForm.date} onChange={e=>setContentForm({...contentForm,date:e.target.value})}/></Field><SubmitButton label="创建内容"/></form></CreatePanel><DetailPanel detail={selectedContent} onClose={()=>setSelectedContent(null)}/></>
 }
 
 function IdeasCenter(){
   const [createOpen,setCreateOpen]=useState(false)
+  const [selectedIdea,setSelectedIdea]=useState<DetailData|null>(null)
   const [ideaForm,setIdeaForm]=useState({title:'',desc:'',tag:'品牌叙事',brand:'创艺装饰'})
   const [ideas,setIdeas]=useState<string[][]>(()=>stored('brandflow-ideas',[['家的第一句问候','品牌片开场不介绍公司，先让“家”成为说话的人。','品牌叙事'],['把隐蔽工程拍成可见的安心','用极近特写和检测动作，把标准变成用户能理解的证据。','工艺内容'],['设计师不是给答案的人','把设计师拍成帮助客户发现生活方式的人。','人物栏目']]))
-  useEffect(()=>{if(isSupabaseConfigured)ideasDb.list().then((rows:any)=>setIdeas(rows.map((row:any)=>[row.title,row.description,row.category]))).catch(()=>{})},[])
+  useEffect(()=>{if(isSupabaseConfigured)ideasDb.list().then((rows:any)=>setIdeas(rows.map((row:any)=>[row.title,row.description,row.category,row.brands?.name||'']))).catch(()=>{})},[])
   useEffect(()=>{if(!isSupabaseConfigured)localStorage.setItem('brandflow-ideas',JSON.stringify(ideas))},[ideas])
-  const addIdea=async(event:React.FormEvent)=>{event.preventDefault();if(isSupabaseConfigured)await ideasDb.create({brandCode:ideaForm.brand==='喜客喜装饰'?'brandB':'brandA',title:ideaForm.title,description:ideaForm.desc,category:ideaForm.tag});setIdeas([[ideaForm.title,ideaForm.desc,ideaForm.tag],...ideas]);setCreateOpen(false);setIdeaForm({title:'',desc:'',tag:'品牌叙事',brand:'创艺装饰'})}
-  return <><PageHead eyebrow="Inspiration" title="灵感中心" desc="收集参考、沉淀观察，并把灵感转化为可执行选题。" action={<motion.button onClick={()=>setCreateOpen(true)} whileHover={{y:-2}} whileTap={{scale:.97}} className="flex h-11 items-center gap-2 rounded-2xl bg-[#8dcc65] px-5 text-sm font-semibold text-white shadow-lg shadow-lime-200"><Plus size={17}/>记录灵感</motion.button>}/><motion.div variants={gridMotion} initial="hidden" animate="show" className="grid gap-4 lg:grid-cols-3">{ideas.map(([title,desc,tag],index)=><Card key={`${title}-${index}`} className="p-6"><span className="grid size-11 place-items-center rounded-2xl bg-[#e5f3dd] text-[#5e9950]"><Lightbulb size={20}/></span><span className="mt-7 inline-block rounded-full bg-[#f3f7f1] px-3 py-1 text-[10px] font-semibold text-[#5f8e53]">{tag}</span><h3 className="mt-4 text-xl font-semibold tracking-tight">{title}</h3><p className="mt-3 text-sm leading-7 text-slate-500">{desc}</p><button className="mt-8 flex items-center gap-1 text-xs font-semibold text-[#67a756]">转为选题 <ArrowUpRight size={14}/></button></Card>)}</motion.div><CreatePanel open={createOpen} onClose={()=>setCreateOpen(false)} title="记录灵感" desc="把观察、参考和创意先收进灵感库。"><form onSubmit={addIdea} className="space-y-4"><Field label="灵感标题"><input required value={ideaForm.title} onChange={e=>setIdeaForm({...ideaForm,title:e.target.value})} placeholder="一句话记录核心想法"/></Field><div className="grid gap-4 sm:grid-cols-2"><Field label="所属品牌"><select value={ideaForm.brand} onChange={e=>setIdeaForm({...ideaForm,brand:e.target.value})}><option>创艺装饰</option><option>喜客喜装饰</option></select></Field><Field label="灵感分类"><select value={ideaForm.tag} onChange={e=>setIdeaForm({...ideaForm,tag:e.target.value})}><option>品牌叙事</option><option>工艺内容</option><option>人物栏目</option><option>案例内容</option></select></Field></div><label className="block text-xs font-medium text-slate-500">详细说明<textarea required value={ideaForm.desc} onChange={e=>setIdeaForm({...ideaForm,desc:e.target.value})} className="mt-2 min-h-32 w-full resize-none rounded-2xl border border-slate-100 bg-[#f8faf7] p-4 text-sm outline-none transition focus:border-emerald-200 focus:ring-4 focus:ring-emerald-50" placeholder="记录画面、文案或执行方向"/></label><SubmitButton label="保存灵感"/></form></CreatePanel></>
+  const addIdea=async(event:React.FormEvent)=>{event.preventDefault();if(isSupabaseConfigured)await ideasDb.create({brandCode:ideaForm.brand==='喜客喜装饰'?'brandB':'brandA',title:ideaForm.title,description:ideaForm.desc,category:ideaForm.tag});setIdeas([[ideaForm.title,ideaForm.desc,ideaForm.tag,ideaForm.brand],...ideas]);setCreateOpen(false);setIdeaForm({title:'',desc:'',tag:'品牌叙事',brand:'创艺装饰'})}
+  return <><PageHead eyebrow="Inspiration" title="灵感中心" desc="收集参考、沉淀观察，并把灵感转化为可执行选题。" action={<motion.button onClick={()=>setCreateOpen(true)} whileHover={{y:-2}} whileTap={{scale:.97}} className="flex h-11 items-center gap-2 rounded-2xl bg-[#8dcc65] px-5 text-sm font-semibold text-white shadow-lg shadow-lime-200"><Plus size={17}/>记录灵感</motion.button>}/><motion.div variants={gridMotion} initial="hidden" animate="show" className="grid gap-4 lg:grid-cols-3">{ideas.map(([title,desc,tag,brand],index)=><Card key={`${title}-${index}`} onClick={()=>setSelectedIdea({title,category:tag,description:desc,fields:[['所属品牌',brand||'未指定'],['内容状态','灵感记录']]})} ariaLabel={`查看灵感 ${title}`} className="p-6"><span className="grid size-11 place-items-center rounded-2xl bg-[#e5f3dd] text-[#5e9950]"><Lightbulb size={20}/></span><span className="mt-7 inline-block rounded-full bg-[#f3f7f1] px-3 py-1 text-[10px] font-semibold text-[#5f8e53]">{tag}</span><h3 className="mt-4 text-xl font-semibold tracking-tight">{title}</h3><p className="mt-3 text-sm leading-7 text-slate-500">{desc}</p><button onClick={event=>event.stopPropagation()} className="mt-8 flex items-center gap-1 text-xs font-semibold text-[#67a756]">转为选题 <ArrowUpRight size={14}/></button></Card>)}</motion.div><CreatePanel open={createOpen} onClose={()=>setCreateOpen(false)} title="记录灵感" desc="把观察、参考和创意先收进灵感库。"><form onSubmit={addIdea} className="space-y-4"><Field label="灵感标题"><input required value={ideaForm.title} onChange={e=>setIdeaForm({...ideaForm,title:e.target.value})} placeholder="一句话记录核心想法"/></Field><div className="grid gap-4 sm:grid-cols-2"><Field label="所属品牌"><select value={ideaForm.brand} onChange={e=>setIdeaForm({...ideaForm,brand:e.target.value})}><option>创艺装饰</option><option>喜客喜装饰</option></select></Field><Field label="灵感分类"><select value={ideaForm.tag} onChange={e=>setIdeaForm({...ideaForm,tag:e.target.value})}><option>品牌叙事</option><option>工艺内容</option><option>人物栏目</option><option>案例内容</option></select></Field></div><label className="block text-xs font-medium text-slate-500">详细说明<textarea required value={ideaForm.desc} onChange={e=>setIdeaForm({...ideaForm,desc:e.target.value})} className="mt-2 min-h-32 w-full resize-none rounded-2xl border border-slate-100 bg-[#f8faf7] p-4 text-sm outline-none transition focus:border-emerald-200 focus:ring-4 focus:ring-emerald-50" placeholder="记录画面、文案或执行方向"/></label><SubmitButton label="保存灵感"/></form></CreatePanel><DetailPanel detail={selectedIdea} onClose={()=>setSelectedIdea(null)}/></>
 }
 
 type GardenPlot = { flower:string; stage:number; color:string } | null
@@ -406,6 +469,18 @@ function CreatePanel({open,onClose,title,desc,children}:{open:boolean;onClose:()
   return <AnimatePresence>{open&&<><motion.button aria-label="关闭新增面板" initial={{opacity:0}} animate={{opacity:1}} exit={{opacity:0}} onClick={onClose} className="fixed inset-0 z-50 bg-slate-900/25 backdrop-blur-sm"/><div className="pointer-events-none fixed inset-0 z-[60] flex items-center justify-center p-3 sm:p-6"><motion.section role="dialog" aria-modal="true" aria-label={title} initial={{y:24,scale:.96,opacity:0}} animate={{y:0,scale:1,opacity:1}} exit={{y:18,scale:.97,opacity:0}} transition={{type:'spring',stiffness:260,damping:26}} className="pointer-events-auto max-h-[calc(100vh-24px)] w-full max-w-xl overflow-y-auto rounded-3xl border border-white bg-white p-5 shadow-[0_30px_90px_rgba(31,52,40,0.24)] sm:p-7"><div className="flex items-start justify-between gap-4"><div><p className="text-xs font-semibold uppercase tracking-[.14em] text-[#67a756]">Create New</p><h2 className="mt-2 text-2xl font-semibold">{title}</h2><p className="mt-2 text-sm leading-6 text-slate-400">{desc}</p></div><button type="button" onClick={onClose} title="关闭" className="grid size-10 shrink-0 place-items-center rounded-2xl bg-[#f4f7f2] text-slate-500 transition hover:bg-slate-100"><X size={18}/></button></div><div className="mt-7">{children}</div></motion.section></div></>}</AnimatePresence>
 }
 
+type DetailData = {
+  title: string
+  category: string
+  description?: string
+  image?: string
+  fields: Array<[string,string]>
+}
+
+function DetailPanel({detail,onClose}:{detail:DetailData|null;onClose:()=>void}){
+  return <AnimatePresence>{detail&&<><motion.button aria-label="关闭详情" initial={{opacity:0}} animate={{opacity:1}} exit={{opacity:0}} onClick={onClose} className="fixed inset-0 z-50 bg-slate-900/25 backdrop-blur-sm"/><div className="pointer-events-none fixed inset-0 z-[60] flex items-center justify-center p-3 sm:p-6"><motion.section role="dialog" aria-modal="true" aria-label={`${detail.title}详情`} initial={{opacity:0,y:20,scale:.97}} animate={{opacity:1,y:0,scale:1}} exit={{opacity:0,y:14,scale:.98}} className="pointer-events-auto max-h-[calc(100vh-24px)] w-full max-w-2xl overflow-y-auto rounded-3xl border border-white bg-white shadow-[0_30px_90px_rgba(31,52,40,0.24)]">{detail.image&&<div className="aspect-[16/7] overflow-hidden rounded-t-3xl"><img src={detail.image} alt={detail.title} className="h-full w-full object-cover"/></div>}<div className="p-5 sm:p-7"><div className="flex items-start justify-between gap-4"><div><span className="rounded-full bg-[#edf7e8] px-3 py-1 text-[10px] font-semibold text-[#5f8e53]">{detail.category}</span><h2 className="mt-4 text-2xl font-semibold">{detail.title}</h2></div><button type="button" onClick={onClose} title="关闭" className="grid size-10 shrink-0 place-items-center rounded-2xl bg-[#f4f7f2] text-slate-500 hover:bg-slate-100"><X size={18}/></button></div>{detail.description&&<p className="mt-5 rounded-2xl bg-[#f7f9f6] p-4 text-sm leading-7 text-slate-600">{detail.description}</p>}<dl className="mt-6 grid gap-3 sm:grid-cols-2">{detail.fields.map(([label,value])=><div key={label} className="rounded-2xl border border-slate-100 p-4"><dt className="text-[11px] text-slate-400">{label}</dt><dd className="mt-2 text-sm font-semibold text-slate-700">{value||'未填写'}</dd></div>)}</dl></div></motion.section></div></>}</AnimatePresence>
+}
+
 function ConfirmDialog({open,onClose,onConfirm,title,desc,loading}:{open:boolean;onClose:()=>void;onConfirm:()=>void;title:string;desc:string;loading:boolean}){
   return <AnimatePresence>{open&&<><motion.button aria-label="关闭删除确认" initial={{opacity:0}} animate={{opacity:1}} exit={{opacity:0}} onClick={onClose} className="fixed inset-0 z-50 bg-slate-900/25 backdrop-blur-sm"/><div className="pointer-events-none fixed inset-0 z-[60] flex items-center justify-center p-4"><motion.section role="alertdialog" aria-modal="true" aria-label={title} initial={{opacity:0,y:18,scale:.96}} animate={{opacity:1,y:0,scale:1}} exit={{opacity:0,y:12,scale:.97}} className="pointer-events-auto w-full max-w-md rounded-3xl border border-white bg-white p-6 shadow-[0_30px_90px_rgba(31,52,40,0.24)]"><span className="grid size-12 place-items-center rounded-2xl bg-rose-50 text-rose-500"><Trash2 size={20}/></span><h2 className="mt-5 text-xl font-semibold">{title}</h2><p className="mt-2 text-sm leading-6 text-slate-500">{desc}</p><p className="mt-4 rounded-2xl bg-[#f7f9f6] px-4 py-3 text-xs text-slate-400">删除后无法恢复，月、周和累计数据都会同步更新。</p><div className="mt-6 grid grid-cols-2 gap-3"><button type="button" disabled={loading} onClick={onClose} className="h-11 rounded-2xl border border-slate-100 bg-white text-sm font-semibold text-slate-500 transition hover:bg-slate-50">取消</button><motion.button type="button" disabled={loading} onClick={onConfirm} whileTap={{scale:.98}} className="h-11 rounded-2xl bg-rose-500 text-sm font-semibold text-white shadow-lg shadow-rose-100 disabled:cursor-wait disabled:opacity-60">{loading?'正在删除...':'确认删除'}</motion.button></div></motion.section></div></>}</AnimatePresence>
 }
@@ -416,30 +491,71 @@ function Reports({chartData,totals}:any){return <><PageHead eyebrow="Invoices & 
 
 function Assets(){
   const [createOpen,setCreateOpen]=useState(false)
+  const [selectedAsset,setSelectedAsset]=useState<DetailData|null>(null)
   const [assetForm,setAssetForm]=useState({title:'',type:'品牌视频',brand:'创艺装饰',fileName:''})
   const [assetFile,setAssetFile]=useState<File|null>(null)
   const [assetItems,setAssetItems]=useState<string[][]>(()=>stored('brandflow-assets',assets))
-  useEffect(()=>{if(isSupabaseConfigured)assetsDb.list().then((rows:any)=>setAssetItems(rows.map((row:any)=>[row.public_url||'/assets/project-home.jpg',row.name,row.category]))).catch(()=>{})},[])
+  useEffect(()=>{if(isSupabaseConfigured)assetsDb.list().then((rows:any)=>setAssetItems(rows.map((row:any)=>[row.public_url||'/assets/project-home.jpg',row.name,row.category,row.brands?.name||'',row.mime_type||'文件']))).catch(()=>{})},[])
   useEffect(()=>{if(!isSupabaseConfigured)localStorage.setItem('brandflow-assets',JSON.stringify(assetItems))},[assetItems])
-  const addAsset=async(event:React.FormEvent)=>{event.preventDefault();if(isSupabaseConfigured&&assetFile){const path=await uploadAsset(assetFile);await assetsDb.create({brandCode:assetForm.brand==='喜客喜装饰'?'brandB':'brandA',name:assetForm.title,category:assetForm.type,storage_path:path,mime_type:assetFile.type,size_bytes:assetFile.size})}setAssetItems([['/assets/project-home.jpg',assetForm.title,assetForm.type],...assetItems]);setCreateOpen(false);setAssetFile(null);setAssetForm({title:'',type:'品牌视频',brand:'创艺装饰',fileName:''})}
-  return <><PageHead eyebrow="Asset Library" title="素材中心" desc="归档原始视频、工地画面、设计案例、品牌文件和过往优秀作品。" action={<motion.button onClick={()=>setCreateOpen(true)} whileHover={{y:-2}} whileTap={{scale:.97}} className="flex h-11 items-center gap-2 rounded-2xl bg-[#8dcc65] px-5 text-sm font-semibold text-white shadow-lg shadow-lime-200"><Upload size={17}/>上传素材</motion.button>}/><motion.div variants={gridMotion} initial="hidden" animate="show" className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">{assetItems.map(([src,title,type],index)=><Card key={`${title}-${index}`} className="overflow-hidden"><div className="aspect-[4/3] overflow-hidden"><motion.img whileHover={{scale:1.04}} transition={{duration:.35}} src={src} alt={title} className="h-full w-full object-cover"/></div><div className="p-5"><span className="rounded-full bg-emerald-50 px-2.5 py-1 text-[10px] font-semibold text-emerald-700">{type}</span><h3 className="mt-4 font-semibold">{title}</h3><p className="mt-2 text-xs text-slate-400">JPG · 本月更新</p></div></Card>)}</motion.div><CreatePanel open={createOpen} onClose={()=>setCreateOpen(false)} title="上传素材" desc="上传文件并补充名称与分类。"><form onSubmit={addAsset} className="space-y-4"><Field label="素材名称"><input required value={assetForm.title} onChange={e=>setAssetForm({...assetForm,title:e.target.value})} placeholder="输入便于检索的素材名称"/></Field><div className="grid gap-4 sm:grid-cols-2"><Field label="所属品牌"><select value={assetForm.brand} onChange={e=>setAssetForm({...assetForm,brand:e.target.value})}><option>创艺装饰</option><option>喜客喜装饰</option></select></Field><Field label="素材分类"><select value={assetForm.type} onChange={e=>setAssetForm({...assetForm,type:e.target.value})}><option>品牌视频</option><option>优秀作品</option><option>设计案例</option><option>原始素材</option><option>品牌文件</option></select></Field></div><label className="block text-xs font-medium text-slate-500">选择文件<input required type="file" accept="image/*,video/*" onChange={e=>{const file=e.target.files?.[0]||null;setAssetFile(file);setAssetForm({...assetForm,fileName:file?.name||''})}} className="mt-2 block w-full rounded-2xl border border-dashed border-emerald-200 bg-[#f6faf4] p-4 text-sm text-slate-500 file:mr-3 file:rounded-xl file:border-0 file:bg-[#dff2d6] file:px-3 file:py-2 file:text-xs file:font-semibold file:text-[#4f8248]"/></label><SubmitButton label="完成上传" icon={<Upload size={17}/>}/></form></CreatePanel></>
+  const addAsset=async(event:React.FormEvent)=>{event.preventDefault();if(isSupabaseConfigured&&assetFile){const path=await uploadAsset(assetFile);await assetsDb.create({brandCode:assetForm.brand==='喜客喜装饰'?'brandB':'brandA',name:assetForm.title,category:assetForm.type,storage_path:path,mime_type:assetFile.type,size_bytes:assetFile.size})}setAssetItems([['/assets/project-home.jpg',assetForm.title,assetForm.type,assetForm.brand,assetFile?.type||assetForm.fileName||'文件'],...assetItems]);setCreateOpen(false);setAssetFile(null);setAssetForm({title:'',type:'品牌视频',brand:'创艺装饰',fileName:''})}
+  return <><PageHead eyebrow="Asset Library" title="素材中心" desc="归档原始视频、工地画面、设计案例、品牌文件和过往优秀作品。" action={<motion.button onClick={()=>setCreateOpen(true)} whileHover={{y:-2}} whileTap={{scale:.97}} className="flex h-11 items-center gap-2 rounded-2xl bg-[#8dcc65] px-5 text-sm font-semibold text-white shadow-lg shadow-lime-200"><Upload size={17}/>上传素材</motion.button>}/><motion.div variants={gridMotion} initial="hidden" animate="show" className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">{assetItems.map(([src,title,type,brand,fileType],index)=><Card key={`${title}-${index}`} onClick={()=>setSelectedAsset({title,category:type,image:src,fields:[['所属品牌',brand||'未指定'],['文件类型',fileType||'文件'],['更新时间','本月']]})} ariaLabel={`查看素材 ${title}`} className="overflow-hidden"><div className="aspect-[4/3] overflow-hidden"><motion.img whileHover={{scale:1.04}} transition={{duration:.35}} src={src} alt={title} className="h-full w-full object-cover"/></div><div className="p-5"><span className="rounded-full bg-emerald-50 px-2.5 py-1 text-[10px] font-semibold text-emerald-700">{type}</span><h3 className="mt-4 font-semibold">{title}</h3><p className="mt-2 text-xs text-slate-400">{fileType||'文件'} · 本月更新</p></div></Card>)}</motion.div><CreatePanel open={createOpen} onClose={()=>setCreateOpen(false)} title="上传素材" desc="上传文件并补充名称与分类。"><form onSubmit={addAsset} className="space-y-4"><Field label="素材名称"><input required value={assetForm.title} onChange={e=>setAssetForm({...assetForm,title:e.target.value})} placeholder="输入便于检索的素材名称"/></Field><div className="grid gap-4 sm:grid-cols-2"><Field label="所属品牌"><select value={assetForm.brand} onChange={e=>setAssetForm({...assetForm,brand:e.target.value})}><option>创艺装饰</option><option>喜客喜装饰</option></select></Field><Field label="素材分类"><select value={assetForm.type} onChange={e=>setAssetForm({...assetForm,type:e.target.value})}><option>品牌视频</option><option>优秀作品</option><option>设计案例</option><option>原始素材</option><option>品牌文件</option></select></Field></div><label className="block text-xs font-medium text-slate-500">选择文件<input required type="file" accept="image/*,video/*" onChange={e=>{const file=e.target.files?.[0]||null;setAssetFile(file);setAssetForm({...assetForm,fileName:file?.name||''})}} className="mt-2 block w-full rounded-2xl border border-dashed border-emerald-200 bg-[#f6faf4] p-4 text-sm text-slate-500 file:mr-3 file:rounded-xl file:border-0 file:bg-[#dff2d6] file:px-3 file:py-2 file:text-xs file:font-semibold file:text-[#4f8248]"/></label><SubmitButton label="完成上传" icon={<Upload size={17}/>}/></form></CreatePanel><DetailPanel detail={selectedAsset} onClose={()=>setSelectedAsset(null)}/></>
 }
 
 function AiPage(){const [text,setText]=useState('');return <><PageHead eyebrow="AI Workspace" title="AI 品牌助手" desc="结合你的品牌数据、内容资产与项目上下文。"/><Card className="mx-auto max-w-4xl overflow-hidden"><div className="border-b border-slate-100 p-6"><div className="flex items-center gap-3"><span className="grid size-11 place-items-center rounded-2xl bg-[#e4f3dc] text-[#5c9e48]"><WandSparkles size={21}/></span><div><h2 className="font-semibold">BrandFlow AI</h2><p className="text-xs text-slate-400">品牌知识库已连接 · 128 个文件</p></div></div></div><div className="min-h-[380px] p-6"><div className="flex max-w-xl gap-3"><span className="grid size-9 shrink-0 place-items-center rounded-2xl bg-[#e4f3dc] text-[#5c9e48]"><Sparkles size={17}/></span><p className="rounded-3xl rounded-tl-md bg-[#f4f7f2] p-4 text-sm leading-7 text-slate-600">你好，我可以帮你分析两个品牌的数据差异、生成装修短视频脚本，或根据工地素材提出内容选题。</p></div></div><div className="m-4 flex items-end gap-2 rounded-3xl border border-slate-100 bg-[#f8faf7] p-2"><textarea value={text} onChange={e=>setText(e.target.value)} className="min-h-14 flex-1 resize-none bg-transparent p-3 text-sm outline-none" placeholder="输入问题或使用 / 调用数据..."/><motion.button whileHover={{scale:1.05}} className="grid size-11 place-items-center rounded-2xl bg-[#8dcc65] text-white"><ArrowUpRight size={18}/></motion.button></div></Card></>}
 
+function AdminSettingsPage({accessRole}:{accessRole:AccessRole}){
+  const [users,setUsers]=useState<AdminUserRow[]>([])
+  const [loading,setLoading]=useState(accessRole==='super_admin')
+  const [status,setStatus]=useState('')
+  const loadUsers=async()=>{
+    if(accessRole!=='super_admin')return
+    setLoading(true);setStatus('')
+    try{
+      if(!isSupabaseConfigured){
+        setUsers([{user_id:'local-owner',email:'local@brandflow.app',display_name:'本地超级管理员',access_role:'super_admin',created_at:new Date().toISOString()}])
+      }else setUsers(await listBrandFlowUsers())
+    }catch(error){setStatus(error instanceof Error?error.message:'用户列表加载失败')}
+    finally{setLoading(false)}
+  }
+  useEffect(()=>{loadUsers()},[accessRole])
+  if(accessRole!=='super_admin'){
+    return <><PageHead eyebrow="Admin Access" title="管理员设置" desc="用户角色与后台访问权限管理。"/><Card className="mx-auto max-w-2xl p-8 text-center"><span className="mx-auto grid size-14 place-items-center rounded-2xl bg-amber-50 text-amber-600"><ShieldCheck size={24}/></span><h2 className="mt-5 text-xl font-semibold">无法进入管理员设置</h2><p className="mt-2 text-sm leading-6 text-slate-500">{accessRole==='admin'?'您当前是管理员，只有超级管理员可以进入此页面。':'您是普通用户，请联系管理员添加权限。'}</p></Card></>
+  }
+  const adminCount=users.filter(user=>user.access_role==='admin').length
+  const memberCount=users.filter(user=>user.access_role==='member').length
+  const updateRole=async(user:AdminUserRow)=>{
+    const nextRole=user.access_role==='admin'?'member':'admin'
+    const action=nextRole==='admin'?'设为管理员':'撤销管理员权限'
+    if(!window.confirm(`确定将 ${user.display_name||user.email} ${action}吗？`))return
+    setStatus('正在更新权限...')
+    try{
+      await setBrandFlowUserRole(user.user_id,nextRole)
+      setStatus('管理员权限已更新')
+      await loadUsers()
+    }catch(error){setStatus(error instanceof Error?error.message:'权限更新失败')}
+  }
+  const roleLabel=(role:AccessRole)=>role==='super_admin'?'超级管理员':role==='admin'?'管理员':'普通用户'
+  return <><PageHead eyebrow="Admin Access" title="管理员设置" desc="仅超级管理员可查看账号并授予管理员权限。"/>
+    <motion.div variants={gridMotion} initial="hidden" animate="show" className="grid gap-4 sm:grid-cols-3">
+      <Card className="p-5"><span className="grid size-11 place-items-center rounded-2xl bg-emerald-50 text-emerald-600"><Crown size={20}/></span><p className="mt-5 text-xs text-slate-400">超级管理员</p><strong className="mt-1 block text-3xl">1</strong><p className="mt-2 text-xs text-slate-400">最早注册账号 · 永久唯一</p></Card>
+      <Card className="p-5"><span className="grid size-11 place-items-center rounded-2xl bg-sky-50 text-sky-600"><UserCog size={20}/></span><p className="mt-5 text-xs text-slate-400">管理员</p><strong className="mt-1 block text-3xl">{adminCount} / 2</strong><p className="mt-2 text-xs text-slate-400">最多可设置两名</p></Card>
+      <Card className="p-5"><span className="grid size-11 place-items-center rounded-2xl bg-slate-100 text-slate-500"><Users size={20}/></span><p className="mt-5 text-xs text-slate-400">普通用户</p><strong className="mt-1 block text-3xl">{memberCount}</strong><p className="mt-2 text-xs text-slate-400">新注册账号默认角色</p></Card>
+    </motion.div>
+    <Card className="mt-4 overflow-hidden"><div className="flex flex-col gap-2 p-6 sm:flex-row sm:items-center sm:justify-between"><div><h2 className="font-semibold">账号与角色</h2><p className="mt-1 text-xs text-slate-400">超级管理员不可转让；达到两名管理员后需先撤销一名。</p></div>{status&&<span className="text-xs text-slate-400">{status}</span>}</div><div className="overflow-x-auto"><table className="w-full min-w-[720px] text-left"><thead className="bg-[#f7f9f6] text-[11px] text-slate-400"><tr><th className="px-6 py-3 font-medium">用户</th><th className="px-4 py-3 font-medium">邮箱账号</th><th className="px-4 py-3 font-medium">注册时间</th><th className="px-4 py-3 font-medium">当前角色</th><th className="px-6 py-3 text-right font-medium">权限操作</th></tr></thead><tbody>{users.map(user=><tr key={user.user_id} className="border-t border-slate-50 text-sm"><td className="px-6 py-4"><div className="flex items-center gap-3"><span className="grid size-9 place-items-center rounded-full bg-[#dff2d6] text-xs font-bold text-[#4d8648]">{user.display_name.charAt(0).toUpperCase()||'B'}</span><b>{user.display_name}</b></div></td><td className="px-4 py-4 text-slate-500">{user.email}</td><td className="px-4 py-4 text-slate-500">{new Date(user.created_at).toLocaleDateString('zh-CN')}</td><td className="px-4 py-4"><span className={`rounded-full px-2.5 py-1 text-[11px] font-semibold ${user.access_role==='super_admin'?'bg-emerald-50 text-emerald-700':user.access_role==='admin'?'bg-sky-50 text-sky-700':'bg-slate-100 text-slate-500'}`}>{roleLabel(user.access_role)}</span></td><td className="px-6 py-4 text-right">{user.access_role==='super_admin'?<span className="text-xs text-slate-300">系统所有者</span>:<button disabled={user.access_role==='member'&&adminCount>=2} onClick={()=>updateRole(user)} className={`rounded-xl px-3 py-2 text-xs font-semibold transition disabled:cursor-not-allowed disabled:opacity-35 ${user.access_role==='admin'?'text-rose-500 hover:bg-rose-50':'text-[#4f8248] hover:bg-[#edf7e8]'}`}>{user.access_role==='admin'?'撤销管理员':'设为管理员'}</button>}</td></tr>)}</tbody></table>{loading&&<div className="py-10 text-center text-sm text-slate-400">正在加载账号...</div>}{!loading&&!users.length&&<div className="py-10 text-center text-sm text-slate-400">暂无账号数据</div>}</div></Card>
+  </>
+}
+
 function SettingsPage({
-  brands,
-  setBrands,
-  onSave,
+  profile,
+  onSaveProfile,
+  accessRole,
 }: {
-  brands: BrandConfig;
-  setBrands: (b: BrandConfig) => void;
-  onSave: (b: BrandConfig) => Promise<void>;
+  profile: UserProfile;
+  onSaveProfile: (displayName: string) => Promise<void>;
+  accessRole: AccessRole;
 }) {
   const [status, setStatus] = useState("");
-  const [accessRole, setAccessRole] = useState<
-    "loading" | "super_admin" | "member"
-  >("loading");
+  const [displayName, setDisplayName] = useState(profile.displayName);
   const [invites, setInvites] = useState<InviteRow[]>([]);
   const [inviteHours, setInviteHours] = useState(24);
   const [inviteUses, setInviteUses] = useState(1);
@@ -455,22 +571,14 @@ function SettingsPage({
       );
     }
   };
+  useEffect(() => setDisplayName(profile.displayName), [profile.displayName]);
   useEffect(() => {
-    if (!isSupabaseConfigured) {
-      setAccessRole("super_admin");
-      return;
-    }
-    getBrandFlowAccessRole()
-      .then((role) => {
-        setAccessRole(role);
-        if (role === "super_admin") loadInvites();
-      })
-      .catch(() => setAccessRole("member"));
-  }, []);
+    if (accessRole === "super_admin") loadInvites();
+  }, [accessRole]);
   const save = async () => {
     setStatus("正在保存...");
     try {
-      await onSave(brands);
+      await onSaveProfile(displayName);
       setStatus("已同步到云端");
     } catch (error) {
       setStatus(error instanceof Error ? error.message : "保存失败");
@@ -517,8 +625,8 @@ function SettingsPage({
     <>
       <PageHead
         eyebrow="Settings"
-        title="品牌与账号设置"
-        desc="配置两个品牌名称、个人工作空间和访问权限。"
+        title="个人账号设置"
+        desc="管理你自己的昵称、头像标识和账号信息。"
       />
       <motion.div
         variants={gridMotion}
@@ -529,44 +637,27 @@ function SettingsPage({
         <Card className="p-6">
           <h2 className="font-semibold">个人资料</h2>
           <div className="mt-6 flex items-center gap-4">
-            <span className="grid size-16 place-items-center rounded-full bg-[#dff2d6] text-lg font-bold text-[#528644]">
-              CY
-            </span>
+            <ProfileAvatar profile={profile} size="lg" />
             <div>
-              <b className="block">创艺运营</b>
-              <span className="text-xs text-slate-400">品牌内容负责人</span>
-              {accessRole !== "loading" && (
-                <span
-                  className={`mt-2 flex w-fit items-center gap-1 rounded-full px-2.5 py-1 text-[10px] font-semibold ${accessRole === "super_admin" ? "bg-emerald-50 text-emerald-700" : "bg-slate-100 text-slate-500"}`}
-                >
-                  <ShieldCheck size={12} />
-                  {accessRole === "super_admin" ? "超级管理员" : "普通成员"}
-                </span>
-              )}
+              <b className="block">{profile.displayName}</b>
+              <span className="text-xs text-slate-400">{profile.jobTitle}</span>
+              <span
+                className={`mt-2 flex w-fit items-center gap-1 rounded-full px-2.5 py-1 text-[10px] font-semibold ${accessRole === "super_admin" ? "bg-emerald-50 text-emerald-700" : accessRole === "admin" ? "bg-sky-50 text-sky-700" : "bg-slate-100 text-slate-500"}`}
+              >
+                <ShieldCheck size={12} />
+                {accessRole === "super_admin" ? "超级管理员" : accessRole === "admin" ? "管理员" : "普通用户"}
+              </span>
             </div>
           </div>
         </Card>
         <Card className="p-6">
-          <h2 className="font-semibold">品牌名称</h2>
+          <h2 className="font-semibold">个人昵称</h2>
           <p className="mt-1 text-xs text-slate-400">
-            修改名称不会影响历史数据。
+            新账号默认使用邮箱 @ 前面的账号名，修改后头像首字符会同步更新。
           </p>
-          <div className="mt-6 grid gap-4 sm:grid-cols-2">
-            <Field label="创艺装饰">
-              <input
-                value={brands.brandA}
-                onChange={(e) =>
-                  setBrands({ ...brands, brandA: e.target.value })
-                }
-              />
-            </Field>
-            <Field label="喜客喜装饰">
-              <input
-                value={brands.brandB}
-                onChange={(e) =>
-                  setBrands({ ...brands, brandB: e.target.value })
-                }
-              />
+          <div className="mt-6">
+            <Field label="账号昵称">
+              <input value={displayName} maxLength={24} onChange={(e) => setDisplayName(e.target.value)} placeholder="输入你的昵称" />
             </Field>
           </div>
           <div className="mt-6 flex items-center gap-3">
@@ -716,7 +807,7 @@ function SettingsPage({
               )}
             </div>
           </Card>
-        ) : accessRole === "member" ? (
+        ) : (
           <Card className="p-6 lg:col-span-2">
             <div className="flex items-center gap-3">
               <span className="grid size-11 place-items-center rounded-2xl bg-slate-100 text-slate-500">
@@ -725,12 +816,12 @@ function SettingsPage({
               <div>
                 <h2 className="font-semibold">成员权限</h2>
                 <p className="mt-1 text-xs text-slate-400">
-                  当前账号为普通成员，邀请码仅由超级管理员生成和管理。
+                  当前账号为{accessRole === "admin" ? "管理员" : "普通用户"}，邀请码仅由超级管理员生成和管理。
                 </p>
               </div>
             </div>
           </Card>
-        ) : null}
+        )}
       </motion.div>
     </>
   );
