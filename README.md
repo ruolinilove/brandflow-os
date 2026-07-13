@@ -27,7 +27,7 @@ BrandFlow OS 是面向装修品牌内容运营者的开源个人数据中心，�
 
 ### 环境要求
 
-- Node.js 20 或更高版本
+- Node.js 22.13 或更高版本（推荐 Node.js 24）
 - pnpm 10 或更高版本
 - 一个 Supabase 项目
 
