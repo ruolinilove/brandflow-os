@@ -17,7 +17,7 @@ import {
 import { isSupabaseConfigured, supabase } from './lib/supabase'
 import { NearbyFood } from './NearbyFood'
 import {
-  assetsDb, bootstrapBrandFlow, contentsDb, createBrandFlowInvite, deleteMetric,
+  assetsDb, bootstrapBrandFlow, contentsDb, createBrandFlowInvite, deleteMetric, deleteMetrics,
   getBrandFlowAccessRole, ideasDb, isBrandFlowAuthorized, listBrandFlowInvites, listBrandFlowUsers,
   loadCoreData, loadGarden, plansDb, projectsDb, revokeBrandFlowInvite,
   saveGarden, saveMetric, saveProfile, setBrandFlowUserRole, uploadAsset, type AccessRole,
@@ -27,7 +27,7 @@ import {
 type BrandId = 'brandA' | 'brandB'
 type PageId = 'dashboard' | 'plan' | 'projects' | 'content' | 'data' | 'assets' | 'ideas' | 'garden' | 'food' | 'ai' | 'admin' | 'settings'
 type BrandConfig = Record<BrandId, string>
-type MetricEntry = { id: string; date: string; brand: BrandId; views: number; shares: number; followers: number }
+type MetricEntry = { id: string; date: string; brand: BrandId; contentName: string; views: number; shares: number; followers: number }
 type UserProfile = { displayName: string; jobTitle: string; avatarUrl: string | null }
 
 const defaultBrands: BrandConfig = { brandA: '创艺装饰', brandB: '喜客喜装饰' }
@@ -38,7 +38,7 @@ const defaultEntries: MetricEntry[] = [
   ['a07','2026-07-07','brandA',68400,472,156],['b07','2026-07-07','brandB',44800,301,114],
   ['a09','2026-07-09','brandA',55600,394,132],['b09','2026-07-09','brandB',52300,366,127],
   ['a11','2026-07-11','brandA',83200,618,209],['b11','2026-07-11','brandB',61700,432,168],
-].map(([id,date,brand,views,shares,followers]) => ({ id, date, brand, views, shares, followers } as MetricEntry))
+].map(([id,date,brand,views,shares,followers]) => ({ id, date, brand, contentName:'示例短视频', views, shares, followers } as MetricEntry))
 
 const navItems = [
   ['dashboard','首页',House],['plan','工作计划',CalendarDays],['projects','项目中心',FolderKanban],
@@ -145,7 +145,7 @@ function App(){
         if(!active)return
         const brandById=new Map(core.brands.map(brand=>[brand.id,brand.code]))
         setBrands(core.brands.reduce((result,brand)=>({...result,[brand.code]:brand.name}),defaultBrands))
-        setEntries(core.metrics.map(metric=>({id:String(metric.id),date:metric.metric_date,brand:brandById.get(metric.brand_id)||'brandA',views:Number(metric.views),shares:Number(metric.shares),followers:Number(metric.follower_growth)})))
+        setEntries(core.metrics.map(metric=>({id:String(metric.id),date:metric.metric_date,brand:brandById.get(metric.brand_id)||'brandA',contentName:metric.content_name||'未命名内容',views:Number(metric.views),shares:Number(metric.shares),followers:Number(metric.follower_growth)})))
         const emailName=session.user.email?.split('@')[0]||'BrandFlow 用户'
         setProfile({displayName:core.profile?.display_name||emailName,jobTitle:core.profile?.role||'品牌内容负责人',avatarUrl:core.profile?.avatar_url||null})
       }catch(error){if(active){setAccessState('denied');setCloudError(error instanceof Error?error.message:'云端数据加载失败')}}
@@ -154,14 +154,19 @@ function App(){
     return ()=>{active=false}
   },[session])
 
-  const addMetricEntry=async(input:{date:string;brand:BrandId;views:number;shares:number})=>{
+  const addMetricEntry=async(input:{date:string;brand:BrandId;contentName:string;views:number;shares:number})=>{
     if(!isSupabaseConfigured){setEntries(current=>[...current,{id:`metric-${Date.now()}`,...input,followers:0}]);return}
-    const row=await saveMetric({brandCode:input.brand,date:input.date,views:input.views,shares:input.shares})
-    setEntries(current=>[...current.filter(entry=>entry.id!==String(row.id)&&!(entry.date===input.date&&entry.brand===input.brand)),{id:String(row.id),date:row.metric_date,brand:input.brand,views:Number(row.views),shares:Number(row.shares),followers:Number(row.follower_growth)}])
+    const row=await saveMetric({brandCode:input.brand,date:input.date,contentName:input.contentName,views:input.views,shares:input.shares})
+    setEntries(current=>[...current.filter(entry=>entry.id!==String(row.id)&&!(entry.date===input.date&&entry.brand===input.brand)),{id:String(row.id),date:row.metric_date,brand:input.brand,contentName:row.content_name,views:Number(row.views),shares:Number(row.shares),followers:Number(row.follower_growth)}])
   }
   const removeMetricEntry=async(id:string)=>{
     if(isSupabaseConfigured)await deleteMetric(Number(id))
     setEntries(current=>current.filter(entry=>entry.id!==id))
+  }
+  const removeMetricEntries=async(ids:string[])=>{
+    if(isSupabaseConfigured)await deleteMetrics(ids.map(Number))
+    const selected=new Set(ids)
+    setEntries(current=>current.filter(entry=>!selected.has(entry.id)))
   }
   const savePersonalProfile=async(displayName:string)=>{
     const cleanName=displayName.trim()
@@ -179,7 +184,7 @@ function App(){
     return {date:`${Number(date.slice(8))}日`,aViews:a?.views||0,bViews:b?.views||0,aShares:a?.shares||0,bShares:b?.shares||0,followers:(a?.followers||0)+(b?.followers||0)}
   }),[entries])
   const totals=useMemo(()=>entries.reduce((r,e)=>({views:r.views+e.views,shares:r.shares+e.shares,followers:r.followers+e.followers}),{views:0,shares:0,followers:0}),[entries])
-  const pageProps={entries,setEntries,brands,setBrands,chartData,totals,onAddMetric:addMetricEntry,onDeleteMetric:removeMetricEntry}
+  const pageProps={entries,setEntries,brands,setBrands,chartData,totals,onAddMetric:addMetricEntry,onDeleteMetric:removeMetricEntry,onDeleteMetrics:removeMetricEntries}
 
   if(authLoading)return <LoadingScreen label="正在连接品牌数据中心..."/>
   if(isSupabaseConfigured&&!session)return <AuthScreen/>
@@ -406,12 +411,14 @@ function Garden(){
   </>
 }
 
-function DataCenter({entries,brands,onAddMetric,onDeleteMetric}:any){
+function DataCenter({entries,brands,onAddMetric,onDeleteMetric,onDeleteMetrics}:any){
   const today=new Date().toLocaleDateString('en-CA')
-  const [form,setForm]=useState({date:today,brand:'brandA' as BrandId,views:'',shares:''})
+  const [form,setForm]=useState({date:today,brand:'brandA' as BrandId,contentName:'',views:'',shares:''})
   const [saving,setSaving]=useState(false)
   const [formError,setFormError]=useState('')
   const [pendingDelete,setPendingDelete]=useState<MetricEntry|null>(null)
+  const [batchDeleteOpen,setBatchDeleteOpen]=useState(false)
+  const [selectedIds,setSelectedIds]=useState<Set<string>>(()=>new Set())
   const [deleting,setDeleting]=useState(false)
   const typedEntries=entries as MetricEntry[]
   const referenceDate=useMemo(()=>{const dates=[today,...typedEntries.map(entry=>entry.date)].sort();return dates[dates.length-1] || today},[entries,today])
@@ -440,25 +447,30 @@ function DataCenter({entries,brands,onAddMetric,onDeleteMetric}:any){
     const totals=sumByBrand(daily)
     return {date:`${Number(date.slice(8))}日`,aViews:totals.brandA.views,bViews:totals.brandB.views}
   }),[entries,monthKey])
-  const recent=[...typedEntries].sort((a,b)=>b.date.localeCompare(a.date)||b.id.localeCompare(a.id)).slice(0,8)
+  const recent=[...typedEntries].sort((a,b)=>b.date.localeCompare(a.date)||b.id.localeCompare(a.id))
+  const allVisibleSelected=recent.length>0&&recent.every(entry=>selectedIds.has(entry.id))
   const add=async(event:React.FormEvent)=>{
     event.preventDefault();setSaving(true);setFormError('')
-    try{await onAddMetric({date:form.date,brand:form.brand,views:Number(form.views),shares:Number(form.shares)});setForm({...form,views:'',shares:''})}
+    try{await onAddMetric({date:form.date,brand:form.brand,contentName:form.contentName.trim(),views:Number(form.views),shares:Number(form.shares)});setForm({...form,contentName:'',views:'',shares:''})}
     catch(error){setFormError(error instanceof Error?error.message:'数据保存失败')}
     finally{setSaving(false)}
   }
-  const confirmRemove=async()=>{if(!pendingDelete)return;setDeleting(true);try{await onDeleteMetric(pendingDelete.id);setPendingDelete(null)}catch(error){setFormError(error instanceof Error?error.message:'删除失败')}finally{setDeleting(false)}}
+  const confirmRemove=async()=>{if(!pendingDelete)return;setDeleting(true);try{await onDeleteMetric(pendingDelete.id);setSelectedIds(current=>{const next=new Set(current);next.delete(pendingDelete.id);return next});setPendingDelete(null)}catch(error){setFormError(error instanceof Error?error.message:'删除失败')}finally{setDeleting(false)}}
+  const toggleSelected=(id:string)=>setSelectedIds(current=>{const next=new Set(current);if(next.has(id))next.delete(id);else next.add(id);return next})
+  const toggleAll=()=>setSelectedIds(current=>allVisibleSelected?new Set():new Set([...current,...recent.map(entry=>entry.id)]))
+  const confirmBatchRemove=async()=>{const ids=[...selectedIds];if(!ids.length)return;setDeleting(true);try{await onDeleteMetrics(ids);setSelectedIds(new Set());setBatchDeleteOpen(false)}catch(error){setFormError(error instanceof Error?error.message:'批量删除失败')}finally{setDeleting(false)}}
 
   return <><PageHead eyebrow="Data Center" title="双品牌数据中心" desc="按周、月与累计维度查看创艺装饰和喜客喜装饰的播放与转发表现。"/>
     <motion.div variants={gridMotion} initial="hidden" animate="show" className="grid gap-4 lg:grid-cols-3">
       {scopes.map(({title,period,icon:Icon,data})=><Card key={title} className="p-5 sm:p-6"><div className="flex items-start justify-between"><div><h2 className="text-lg font-semibold">{title}</h2><p className="mt-1 text-xs text-slate-400">{period}</p></div><span className="grid size-10 place-items-center rounded-2xl bg-[#edf7e8] text-[#67a756]"><Icon size={18}/></span></div><div className="mt-6 space-y-3">{(['brandA','brandB'] as BrandId[]).map((brand,index)=><div key={brand} className="rounded-2xl border border-slate-100 bg-[#f8faf7] p-4"><div className="flex items-center gap-2"><i className={`size-2 rounded-full ${index===0?'bg-[#79bf58]':'bg-[#69b8b0]'}`}/><b className="text-sm">{brands[brand]}</b></div><div className="mt-4 grid grid-cols-2 gap-3"><div><span className="text-[11px] text-slate-400">播放量</span><strong className="mt-1 block text-xl font-semibold">{fmt(data[brand].views)}</strong></div><div><span className="text-[11px] text-slate-400">转发量</span><strong className="mt-1 block text-xl font-semibold">{fmt(data[brand].shares)}</strong></div></div></div>)}</div></Card>)}
     </motion.div>
     <motion.div variants={gridMotion} initial="hidden" animate="show" className="mt-4 grid gap-4 lg:grid-cols-3">
-      <Card className="p-5 sm:p-6"><div><h2 className="text-lg font-semibold">新数据记录</h2><p className="mt-1 text-xs text-slate-400">选择品牌与日期，录入当日账号数据</p></div><form onSubmit={add} className="mt-6 space-y-4"><fieldset><legend className="text-xs font-medium text-slate-500">品牌名</legend><div className="mt-2 grid grid-cols-2 gap-2 rounded-2xl bg-[#f4f7f2] p-1.5">{(['brandA','brandB'] as BrandId[]).map((brand,index)=><motion.button type="button" whileTap={{scale:.98}} key={brand} onClick={()=>setForm({...form,brand})} aria-pressed={form.brand===brand} className={`flex min-h-14 items-center gap-2 rounded-xl px-3 text-left text-xs font-semibold transition sm:text-sm ${form.brand===brand?'bg-white text-slate-900 shadow-[0_6px_20px_rgba(54,84,72,0.10)] ring-1 ring-white':'text-slate-400 hover:text-slate-700'}`}><span className={`grid size-7 shrink-0 place-items-center rounded-lg text-[11px] font-bold text-white ${index===0?'bg-[#79bf58]':'bg-[#69b8b0]'}`}>{index===0?'创':'喜'}</span><span className="min-w-0 leading-5">{brands[brand]}</span>{form.brand===brand&&<CheckCircle2 size={15} className="ml-auto hidden shrink-0 text-[#72b653] sm:block"/>}</motion.button>)}</div></fieldset><Field label="数据日期"><input type="date" required value={form.date} onChange={e=>setForm({...form,date:e.target.value})}/></Field><div className="grid gap-3 sm:grid-cols-2"><Field label="播放量"><input type="number" min="0" required placeholder="例如 28600" value={form.views} onChange={e=>setForm({...form,views:e.target.value})}/></Field><Field label="转发量"><input type="number" min="0" required placeholder="例如 168" value={form.shares} onChange={e=>setForm({...form,shares:e.target.value})}/></Field></div>{formError&&<p className="rounded-2xl bg-rose-50 px-3 py-2 text-xs text-rose-600">{formError}</p>}<motion.button disabled={saving} whileHover={saving?undefined:{scale:1.015,y:-1}} whileTap={saving?undefined:{scale:.98}} className="flex h-12 w-full items-center justify-center gap-2 rounded-2xl bg-[#8dcc65] text-sm font-semibold text-white shadow-lg shadow-lime-200 transition hover:bg-[#82c45c] disabled:cursor-wait disabled:opacity-60"><Plus size={18}/>{saving?'正在保存...':'添加数据'}</motion.button></form></Card>
+      <Card className="p-5 sm:p-6"><div><h2 className="text-lg font-semibold">新数据记录</h2><p className="mt-1 text-xs text-slate-400">填写内容名称，并选择所属品牌与日期</p></div><form onSubmit={add} className="mt-6 space-y-4"><Field label="内容名称"><input type="text" required maxLength={80} placeholder="例如：旧房改造完工实拍" value={form.contentName} onChange={e=>setForm({...form,contentName:e.target.value})}/></Field><fieldset><legend className="text-xs font-medium text-slate-500">品牌名</legend><div className="mt-2 grid grid-cols-2 gap-2 rounded-2xl bg-[#f4f7f2] p-1.5">{(['brandA','brandB'] as BrandId[]).map((brand,index)=><motion.button type="button" whileTap={{scale:.98}} key={brand} onClick={()=>setForm({...form,brand})} aria-pressed={form.brand===brand} className={`flex min-h-14 items-center gap-2 rounded-xl px-3 text-left text-xs font-semibold transition sm:text-sm ${form.brand===brand?'bg-white text-slate-900 shadow-[0_6px_20px_rgba(54,84,72,0.10)] ring-1 ring-white':'text-slate-400 hover:text-slate-700'}`}><span className={`grid size-7 shrink-0 place-items-center rounded-lg text-[11px] font-bold text-white ${index===0?'bg-[#79bf58]':'bg-[#69b8b0]'}`}>{index===0?'创':'喜'}</span><span className="min-w-0 leading-5">{brands[brand]}</span>{form.brand===brand&&<CheckCircle2 size={15} className="ml-auto hidden shrink-0 text-[#72b653] sm:block"/>}</motion.button>)}</div></fieldset><Field label="数据日期"><input type="date" required value={form.date} onChange={e=>setForm({...form,date:e.target.value})}/></Field><div className="grid gap-3 sm:grid-cols-2"><Field label="播放量"><input type="number" min="0" required placeholder="例如 28600" value={form.views} onChange={e=>setForm({...form,views:e.target.value})}/></Field><Field label="转发量"><input type="number" min="0" required placeholder="例如 168" value={form.shares} onChange={e=>setForm({...form,shares:e.target.value})}/></Field></div>{formError&&<p className="rounded-2xl bg-rose-50 px-3 py-2 text-xs text-rose-600">{formError}</p>}<motion.button disabled={saving} whileHover={saving?undefined:{scale:1.015,y:-1}} whileTap={saving?undefined:{scale:.98}} className="flex h-12 w-full items-center justify-center gap-2 rounded-2xl bg-[#8dcc65] text-sm font-semibold text-white shadow-lg shadow-lime-200 transition hover:bg-[#82c45c] disabled:cursor-wait disabled:opacity-60"><Plus size={18}/>{saving?'正在保存...':'添加数据'}</motion.button></form></Card>
       <Card className="min-h-[440px] p-5 sm:p-6 lg:col-span-2"><div><h2 className="text-lg font-semibold">本月播放趋势</h2><p className="mt-1 text-xs text-slate-400">{brands.brandA}与{brands.brandB}每日播放量对比</p></div><div className="mt-6 h-[330px]"><ResponsiveContainer width="100%" height="100%"><LineChart data={trendData}><CartesianGrid stroke="#edf1ed" vertical={false}/><XAxis dataKey="date" axisLine={false} tickLine={false} tick={{fontSize:11,fill:'#94a3b8'}}/><YAxis axisLine={false} tickLine={false} tick={{fontSize:11,fill:'#94a3b8'}} width={48}/><Tooltip content={<ChartTooltip/>}/><Legend iconType="circle" wrapperStyle={{fontSize:11}}/><Line name={brands.brandA} type="monotone" dataKey="aViews" stroke="#79bf58" strokeWidth={3} dot={{r:3,fill:'#fff',strokeWidth:2}}/><Line name={brands.brandB} type="monotone" dataKey="bViews" stroke="#69b8b0" strokeWidth={3} dot={{r:3,fill:'#fff',strokeWidth:2}}/></LineChart></ResponsiveContainer></div></Card>
     </motion.div>
-    <motion.div variants={gridMotion} initial="hidden" animate="show" className="mt-4"><Card className="overflow-hidden"><div className="p-5 sm:p-6"><h2 className="text-lg font-semibold">最近数据记录</h2><p className="mt-1 text-xs text-slate-400">新增记录会实时同步到上方统计与趋势</p></div><div className="overflow-x-auto"><table className="w-full min-w-[620px] text-left"><thead className="bg-[#f7f9f6] text-[11px] text-slate-400"><tr><th className="px-6 py-3 font-medium">日期</th><th className="px-4 py-3 font-medium">品牌名</th><th className="px-4 py-3 font-medium">播放量</th><th className="px-4 py-3 font-medium">转发量</th><th className="px-6 py-3 text-right font-medium">操作</th></tr></thead><tbody>{recent.map((entry:MetricEntry)=><tr key={entry.id} className="border-t border-slate-50 text-sm transition hover:bg-[#fbfdf9]"><td className="px-6 py-4 text-slate-500">{entry.date}</td><td className="px-4 py-4 font-semibold">{brands[entry.brand]}</td><td className="px-4 py-4">{fmt(entry.views)}</td><td className="px-4 py-4">{fmt(entry.shares)}</td><td className="px-6 py-4 text-right"><button onClick={()=>setPendingDelete(entry)} title="删除记录" aria-label={`删除 ${entry.date} ${brands[entry.brand]} 数据`} className="inline-grid size-9 place-items-center rounded-xl text-slate-400 transition hover:bg-rose-50 hover:text-rose-500"><Trash2 size={16}/></button></td></tr>)}</tbody></table></div></Card></motion.div>
-    <ConfirmDialog open={Boolean(pendingDelete)} onClose={()=>!deleting&&setPendingDelete(null)} onConfirm={confirmRemove} loading={deleting} title="确认删除这条数据？" desc={pendingDelete?`${pendingDelete.date} · ${brands[pendingDelete.brand]} · 播放 ${fmt(pendingDelete.views)} · 转发 ${fmt(pendingDelete.shares)}`:''}/>
+    <motion.div variants={gridMotion} initial="hidden" animate="show" className="mt-4"><Card className="overflow-hidden"><div className="flex flex-col gap-3 p-5 sm:flex-row sm:items-center sm:justify-between sm:p-6"><div><h2 className="text-lg font-semibold">数据记录</h2><p className="mt-1 text-xs text-slate-400">可勾选多条记录后批量删除</p></div><div className="flex items-center gap-3"><span className="text-xs text-slate-400">已选 {selectedIds.size} 条</span><button disabled={!selectedIds.size} onClick={()=>setBatchDeleteOpen(true)} className="flex h-10 items-center gap-2 rounded-2xl border border-rose-100 bg-rose-50 px-4 text-xs font-semibold text-rose-600 transition hover:bg-rose-100 disabled:cursor-not-allowed disabled:opacity-40"><Trash2 size={15}/>批量删除</button></div></div><div className="overflow-x-auto"><table className="w-full min-w-[760px] text-left"><thead className="bg-[#f7f9f6] text-[11px] text-slate-400"><tr><th className="w-14 px-6 py-3"><input type="checkbox" aria-label="全选数据记录" checked={allVisibleSelected} onChange={toggleAll} className="size-4 accent-[#79bf58]"/></th><th className="px-4 py-3 font-medium">日期</th><th className="px-4 py-3 font-medium">内容名称</th><th className="px-4 py-3 font-medium">品牌名</th><th className="px-4 py-3 font-medium">播放量</th><th className="px-4 py-3 font-medium">转发量</th><th className="px-6 py-3 text-right font-medium">操作</th></tr></thead><tbody>{recent.map((entry:MetricEntry)=><tr key={entry.id} className={`border-t border-slate-50 text-sm transition ${selectedIds.has(entry.id)?'bg-[#f5faf2]':'hover:bg-[#fbfdf9]'}`}><td className="px-6 py-4"><input type="checkbox" aria-label={`选择 ${entry.contentName||'未命名内容'}`} checked={selectedIds.has(entry.id)} onChange={()=>toggleSelected(entry.id)} className="size-4 accent-[#79bf58]"/></td><td className="px-4 py-4 text-slate-500">{entry.date}</td><td className="max-w-64 px-4 py-4 font-semibold"><span className="block truncate">{entry.contentName||'未命名内容'}</span></td><td className="px-4 py-4">{brands[entry.brand]}</td><td className="px-4 py-4">{fmt(entry.views)}</td><td className="px-4 py-4">{fmt(entry.shares)}</td><td className="px-6 py-4 text-right"><button onClick={()=>setPendingDelete(entry)} title="删除记录" aria-label={`删除 ${entry.contentName||'未命名内容'} 数据`} className="inline-grid size-9 place-items-center rounded-xl text-slate-400 transition hover:bg-rose-50 hover:text-rose-500"><Trash2 size={16}/></button></td></tr>)}</tbody></table></div></Card></motion.div>
+    <ConfirmDialog open={Boolean(pendingDelete)} onClose={()=>!deleting&&setPendingDelete(null)} onConfirm={confirmRemove} loading={deleting} title="确认删除这条数据？" desc={pendingDelete?`${pendingDelete.contentName||'未命名内容'} · ${pendingDelete.date} · ${brands[pendingDelete.brand]} · 播放 ${fmt(pendingDelete.views)} · 转发 ${fmt(pendingDelete.shares)}`:''}/>
+    <ConfirmDialog open={batchDeleteOpen} onClose={()=>!deleting&&setBatchDeleteOpen(false)} onConfirm={confirmBatchRemove} loading={deleting} title={`确认删除选中的 ${selectedIds.size} 条数据？`} desc="删除后数据将从统计、趋势图和记录列表中同步移除，且无法恢复。"/>
   </>
 }
 

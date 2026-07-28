@@ -15,6 +15,7 @@ export type MetricRow = {
   brand_id: string
   metric_date: string
   platform: string
+  content_name: string
   views: number
   shares: number
   follower_growth: number
@@ -137,7 +138,7 @@ export async function loadCoreData() {
   const client = requireSupabase()
   const [brandsResult, metricsResult, profileResult] = await Promise.all([
     client.from('brands').select('id, code, name, color').order('code'),
-    client.from('metric_entries').select('id, brand_id, metric_date, platform, views, shares, follower_growth').order('metric_date'),
+    client.from('metric_entries').select('id, brand_id, metric_date, platform, content_name, views, shares, follower_growth').order('metric_date'),
     client.from('profiles').select('display_name, role, avatar_url').maybeSingle(),
   ])
   return {
@@ -157,6 +158,7 @@ export async function saveBrandName(code: BrandCode, name: string) {
 export async function saveMetric(input: {
   brandCode: BrandCode
   date: string
+  contentName: string
   views: number
   shares: number
   followerGrowth?: number
@@ -178,11 +180,12 @@ export async function saveMetric(input: {
       brand_id: brand.id,
       metric_date: input.date,
       platform: input.platform ?? 'all',
+      content_name: input.contentName.trim(),
       views: input.views,
       shares: input.shares,
       follower_growth: input.followerGrowth ?? 0,
     }, { onConflict: 'owner_id,brand_id,metric_date,platform' })
-    .select('id, brand_id, metric_date, platform, views, shares, follower_growth')
+    .select('id, brand_id, metric_date, platform, content_name, views, shares, follower_growth')
     .single()
   return assertData(data as MetricRow | null, error)
 }
@@ -190,6 +193,13 @@ export async function saveMetric(input: {
 export async function deleteMetric(id: number) {
   const client = requireSupabase()
   const { error } = await client.from('metric_entries').delete().eq('id', id)
+  if (error) throw error
+}
+
+export async function deleteMetrics(ids: number[]) {
+  if (!ids.length) return
+  const client = requireSupabase()
+  const { error } = await client.from('metric_entries').delete().in('id', ids)
   if (error) throw error
 }
 

@@ -114,6 +114,7 @@ export function NearbyFood() {
   const [configDraft,setConfigDraft] = useState<AMapConfig>(readConfig)
   const [center,setCenter] = useState<Coordinate>(guiYangCenter)
   const [locationName,setLocationName] = useState('贵阳市中心')
+  const [locationQuery,setLocationQuery] = useState('')
   const [query,setQuery] = useState('美食')
   const [category,setCategory] = useState('全部')
   const [radius,setRadius] = useState(3000)
@@ -212,6 +213,42 @@ export function NearbyFood() {
     if (connected) searchNearby(query || '美食')
   }
 
+  const searchLocation = async (event: FormEvent) => {
+    event.preventDefault()
+    const keyword = locationQuery.trim()
+    if (!keyword) {
+      setStatus('请输入城市、商圈或详细地址')
+      return
+    }
+    if (!connected || !amapApi.current || !mapInstance.current) {
+      setStatus('地图尚未连接，请稍后再试')
+      return
+    }
+    setLoading(true)
+    setStatus(`正在查找“${keyword}”...`)
+    try {
+      const poi = await new Promise<any>((resolve,reject) => {
+        const search = new amapApi.current.PlaceSearch({ pageSize:10,pageIndex:1,extensions:'all' })
+        search.search(keyword,(state:string,response:any) => {
+          if (state === 'complete' && response?.poiList?.pois?.length) resolve(response.poiList.pois[0])
+          else if (state === 'no_data') reject(new Error('没有找到这个地点，请补充城市或区县后重试'))
+          else reject(new Error(response?.info || '地点查询失败'))
+        })
+      })
+      const nextCenter = parseCoordinate(poi.location)
+      const nextName = poi.name || keyword
+      setCenter(nextCenter)
+      setLocationName(nextName)
+      mapInstance.current.setCenter(nextCenter)
+      mapInstance.current.setZoom(15)
+      await searchNearby(query || '美食',nextCenter,radius)
+    } catch (error) {
+      setStatus(error instanceof Error ? error.message : '地点查询失败')
+    } finally {
+      setLoading(false)
+    }
+  }
+
   const chooseCategory = (nextCategory: string) => {
     setCategory(nextCategory)
     if (connected) searchNearby(nextCategory === '全部' ? '美食' : nextCategory)
@@ -289,6 +326,18 @@ export function NearbyFood() {
       <label className="text-xs font-medium text-slate-500">安全密钥<input type="password" value={configDraft.securityCode} onChange={event=>setConfigDraft({...configDraft,securityCode:event.target.value})} className="mt-2 h-11 w-full rounded-2xl border border-slate-100 bg-[#f8faf7] px-4 text-sm outline-none focus:border-emerald-200 focus:ring-4 focus:ring-emerald-50" placeholder="填写安全密钥"/></label>
       <button className="h-11 rounded-2xl bg-slate-900 px-5 text-sm font-semibold text-white">连接地图</button>
     </motion.form>}
+
+    <motion.form onSubmit={searchLocation} initial={{opacity:0,y:8}} animate={{opacity:1,y:0}} className={`${cardClass} mb-4 flex flex-col gap-3 p-4 sm:flex-row sm:items-center`}>
+      <span className="grid size-10 shrink-0 place-items-center rounded-2xl bg-[#edf7e8] text-[#67a756]"><MapPin size={18}/></span>
+      <div className="min-w-0 flex-1">
+        <label htmlFor="manual-location" className="text-xs font-semibold text-slate-600">手动设置位置</label>
+        <p className="mt-1 text-[11px] text-slate-400">定位不准时，可输入城市、商圈、小区或详细地址</p>
+      </div>
+      <div className="flex min-w-0 flex-1 gap-2 sm:max-w-xl">
+        <input id="manual-location" value={locationQuery} onChange={event=>setLocationQuery(event.target.value)} className="h-11 min-w-0 flex-1 rounded-2xl border border-slate-100 bg-[#f8faf7] px-4 text-sm outline-none transition focus:border-emerald-200 focus:ring-4 focus:ring-emerald-50" placeholder="例如：成都市春熙路"/>
+        <button disabled={loading} className="h-11 shrink-0 rounded-2xl bg-slate-900 px-5 text-sm font-semibold text-white transition disabled:opacity-50">定位到这里</button>
+      </div>
+    </motion.form>
 
     <div className="mb-4 flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
       <form onSubmit={submitSearch} className="flex min-w-0 flex-1 gap-2">
