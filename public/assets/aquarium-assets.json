@@ -6,6 +6,15 @@
     "jellyfish": { "name": "海月水母", "scientificName": "Aurelia aurita", "image": "/assets/aquarium/creatures/jellyfish.svg", "speed": 12, "size": 94, "food": "浮游生物", "zone": "upper" },
     "seahorse": { "name": "黄海马", "scientificName": "Hippocampus kuda", "image": "/assets/aquarium/creatures/seahorse.svg", "speed": 9, "size": 88, "food": "丰年虾", "zone": "reef" },
     "greenTurtle": { "name": "绿海龟", "scientificName": "Chelonia mydas", "image": "/assets/aquarium/creatures/green-turtle.svg", "speed": 24, "size": 126, "food": "海草", "zone": "open" },
-    "starfish": { "name": "太阳海星", "scientificName": "Solasteridae", "image": "/assets/aquarium/creatures/starfish.svg", "speed": 2, "size": 70, "food": "贝类碎肉", "zone": "bottom" }
+    "starfish": { "name": "太阳海星", "scientificName": "Solasteridae", "image": "/assets/aquarium/creatures/starfish.svg", "speed": 2, "size": 70, "food": "贝类碎肉", "zone": "bottom" },
+    "angelfish": { "name": "七彩神仙鱼", "scientificName": "Pterophyllum scalare", "image": "/assets/aquarium/creatures/angelfish.svg", "speed": 27, "size": 82, "food": "丰年虾", "zone": "reef" },
+    "butterflyfish": { "name": "月光蝶鱼", "scientificName": "Chaetodontidae", "image": "/assets/aquarium/creatures/butterflyfish.svg", "speed": 38, "size": 78, "food": "珊瑚虫", "zone": "reef" },
+    "pufferfish": { "name": "星点河豚", "scientificName": "Arothron stellatus", "image": "/assets/aquarium/creatures/pufferfish.svg", "speed": 18, "size": 82, "food": "贝肉", "zone": "open" },
+    "mantaRay": { "name": "珊瑚蝠鲼", "scientificName": "Mobula alfredi", "image": "/assets/aquarium/creatures/manta-ray.svg", "speed": 29, "size": 132, "food": "浮游生物", "zone": "open" },
+    "reefShark": { "name": "黑鳍礁鲨", "scientificName": "Carcharhinus melanopterus", "image": "/assets/aquarium/creatures/reef-shark.svg", "speed": 48, "size": 146, "food": "鱼肉", "zone": "open" },
+    "octopus": { "name": "巨型太平洋章鱼", "scientificName": "Enteroctopus dofleini", "image": "/assets/aquarium/creatures/octopus.svg", "speed": 8, "size": 100, "food": "甲壳类", "zone": "bottom" },
+    "crab": { "name": "蓝蟹", "scientificName": "Callinectes sapidus", "image": "/assets/aquarium/creatures/crab.svg", "speed": 7, "size": 76, "food": "贝类碎肉", "zone": "bottom" },
+    "lobster": { "name": "锦绣龙虾", "scientificName": "Panulirus ornatus", "image": "/assets/aquarium/creatures/lobster.svg", "speed": 5, "size": 92, "food": "小鱼虾", "zone": "bottom" },
+    "dolphin": { "name": "宽吻海豚", "scientificName": "Tursiops truncatus", "image": "/assets/aquarium/creatures/dolphin.svg", "speed": 54, "size": 150, "food": "鲱鱼", "zone": "upper" }
   }
 }

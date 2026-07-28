@@ -5,7 +5,7 @@ import { isSupabaseConfigured } from '../lib/supabase'
 import { loadFarmGame, saveFarmGame } from '../lib/brandflow-db'
 import { useFarmAssets } from './farm-assets'
 import { FarmCanvas, type FarmToolMode } from './FarmCanvas'
-import { stateAtTime, timeUntilReady, type FarmPlayerState, type FarmPlot } from './farm-types'
+import { stateAtTime, timeUntilReady, type FarmPlayerState, type FarmPlot, type PlantAsset } from './farm-types'
 
 type FarmGameProps = {
   profile: { displayName: string; avatarUrl: string | null }
@@ -13,20 +13,22 @@ type FarmGameProps = {
 
 type Panel = 'shop' | 'warehouse' | 'friends' | null
 
+const starterSeeds = { sunflower: 6, tomato: 4, strawberry: 4, corn: 4, carrot: 3, pumpkin: 3, watermelon: 3, eggplant: 2, cabbage: 2, chili: 2, grape: 2, pineapple: 2 }
+
 const defaultPlayer: FarmPlayerState = {
   level: 1,
   experience: 12,
-  coins: 126,
-  seeds: { sunflower: 6 },
-  inventory: { sunflower: 0 },
+  coins: 1260,
+  seeds: starterSeeds,
+  inventory: Object.fromEntries(Object.keys(starterSeeds).map(key => [key, 0])),
   selectedCrop: 'sunflower',
 }
 
 function initialPlots(): FarmPlot[] {
   const now = Date.now()
+  const showcase = ['sunflower', 'tomato', 'strawberry', 'corn', 'carrot', 'pumpkin', 'watermelon', 'eggplant', 'cabbage', 'chili', 'grape', 'pineapple']
   return Array.from({ length: 18 }, (_, position) => {
-    if (position === 0) return { position, plantKey: 'sunflower', growthState: 'ready', plantedAt: new Date(now - 30000).toISOString() }
-    if (position === 1) return { position, plantKey: 'sunflower', growthState: 'medium', plantedAt: new Date(now - 12500).toISOString() }
+    if (position < showcase.length) return { position, plantKey: showcase[position], growthState: position < 6 ? 'ready' : 'medium', plantedAt: new Date(now - (position < 6 ? 120000 : 18000 + position * 900)).toISOString() }
     return { position, plantKey: null, growthState: null, plantedAt: null }
   })
 }
@@ -98,6 +100,13 @@ export function FarmGame({ profile }: FarmGameProps) {
 
   useEffect(() => {
     if (!assets.manifest) return
+    const plantKeys = Object.keys(assets.manifest.plants)
+    setPlayer(current => ({
+      ...current,
+      seeds: plantKeys.reduce((result, key) => ({ ...result, [key]: current.seeds[key] ?? starterSeeds[key as keyof typeof starterSeeds] ?? 0 }), {} as Record<string, number>),
+      inventory: plantKeys.reduce((result, key) => ({ ...result, [key]: current.inventory[key] ?? 0 }), {} as Record<string, number>),
+      selectedCrop: assets.manifest!.plants[current.selectedCrop] ? current.selectedCrop : 'sunflower',
+    }))
     const timer = window.setInterval(() => {
       setPlots(current => {
         let changed = false
@@ -216,6 +225,12 @@ export function FarmGame({ profile }: FarmGameProps) {
     setNotice(`购买了 1 颗${plant.name}种子`)
   }
 
+  const selectCrop = (plantKey: string) => {
+    if (!assets.manifest?.plants[plantKey]) return
+    setPlayer(current => ({ ...current, selectedCrop: plantKey }))
+    setNotice(`已选择${assets.manifest.plants[plantKey].name}种子，点击空土地即可播种`)
+  }
+
   const sellProduce = (plantKey: string) => {
     if (!assets.manifest) return
     const count = player.inventory[plantKey] || 0
@@ -254,6 +269,9 @@ export function FarmGame({ profile }: FarmGameProps) {
   const experienceTotal = expRequired(player.level)
   const growingCount = plots.filter(plot => plot.plantKey && plot.growthState !== 'ready' && plot.growthState !== 'harvest').length
   const readyCount = plots.filter(plot => plot.growthState === 'ready').length
+  const totalSeeds = Object.values(player.seeds).reduce((sum, count) => sum + count, 0)
+  const totalInventory = Object.values(player.inventory).reduce((sum, count) => sum + count, 0)
+  const selectedPlantName = assets.manifest?.plants[player.selectedCrop]?.name || '向日葵'
 
   if (assets.error) return <div className="rounded-3xl bg-rose-50 p-8 text-sm text-rose-600">{assets.error}</div>
 
@@ -282,7 +300,7 @@ export function FarmGame({ profile }: FarmGameProps) {
         <FarmTopEntry label="成就" icon={<Trophy size={21}/>} onClick={() => setNotice(`农场成就：已解锁 ${plots.filter(plot => plot.plantKey).length}/18 块种植记录`)}/>
         <FarmTopEntry label="装扮" icon={<Sparkles size={21}/>} onClick={() => setNotice('农场装扮功能正在准备更多主题')}/>
         <FarmTopEntry label="商店" icon={<Store size={21}/>} active={panel === 'shop'} onClick={() => setPanel(panel === 'shop' ? null : 'shop')}/>
-        <FarmTopEntry label="仓库" icon={<Warehouse size={21}/>} badge={player.inventory.sunflower || 0} active={panel === 'warehouse'} onClick={() => setPanel(panel === 'warehouse' ? null : 'warehouse')}/>
+        <FarmTopEntry label="仓库" icon={<Warehouse size={21}/>} badge={totalInventory} active={panel === 'warehouse'} onClick={() => setPanel(panel === 'warehouse' ? null : 'warehouse')}/>
         <FarmTopEntry label="加工" icon={<Wrench size={21}/>} onClick={() => setNotice('加工坊可把收成制作成更高价值商品')}/>
         <FarmTopEntry label="任务" icon={<Sprout size={21}/>} onClick={() => setNotice(`今日任务：播种 ${plots.filter(plot => plot.plantKey).length}/18，成熟 ${readyCount} 块`)}/>
         <FarmTopEntry label="好友" icon={<Users size={21}/>} active={panel === 'friends'} onClick={() => setPanel(panel === 'friends' ? null : 'friends')}/>
@@ -294,7 +312,7 @@ export function FarmGame({ profile }: FarmGameProps) {
 
       <div className="absolute bottom-2.5 left-1/2 flex max-w-[calc(100%-18px)] -translate-x-1/2 items-end gap-1 overflow-x-auto rounded-2xl border-[3px] border-[#f7e5b8] bg-[#704923]/94 p-1.5 shadow-[0_7px_0_rgba(62,40,20,.4)] backdrop-blur sm:bottom-3 sm:gap-1.5 sm:p-2">
         <FarmModeButton label="移动" active={tool === 'auto'} icon={<Move size={18}/>} onClick={() => { setTool('auto'); setNotice('智能模式：空地播种，成熟作物直接采收') }}/>
-        <FarmModeButton label="种子包" active={panel === 'shop'} icon={<Backpack size={18}/>} badge={player.seeds.sunflower || 0} onClick={() => setPanel(panel === 'shop' ? null : 'shop')}/>
+        <FarmModeButton label="种子包" active={panel === 'shop'} icon={<Backpack size={18}/>} badge={totalSeeds} onClick={() => setPanel(panel === 'shop' ? null : 'shop')}/>
         <FarmModeButton label="除虫" active={false} icon={<Bug size={18}/>} onClick={() => setNotice('已经巡视全部土地，没有发现害虫')}/>
         <FarmModeButton label="浇水" active={tool === 'water'} icon={<Droplets size={18}/>} onClick={() => { setTool('water'); setNotice('浇水模式：点击成长中的作物加速 4 秒') }}/>
         <FarmModeButton label="铲除" active={false} icon={<Shovel size={18}/>} onClick={() => setNotice('铲除工具已收好，避免误删正在成长的作物')}/>
@@ -304,7 +322,7 @@ export function FarmGame({ profile }: FarmGameProps) {
 
       <div className="absolute left-4 top-[118px] hidden w-40 rounded-2xl border-2 border-white/80 bg-[#fff7dc]/92 p-3 text-[#6c4b2a] shadow-lg backdrop-blur xl:block">
         <div className="flex items-center gap-2 text-xs font-black"><Sparkles size={15} className="text-amber-500"/>今日农场任务</div>
-        <div className="mt-3 space-y-2 text-[10px]"><p className="flex justify-between"><span>播种土地</span><b>{plots.filter(item => item.plantKey).length}/18</b></p><p className="flex justify-between"><span>成熟作物</span><b>{readyCount}</b></p><p className="flex justify-between"><span>仓库收成</span><b>{player.inventory.sunflower || 0}</b></p></div>
+        <div className="mt-3 space-y-2 text-[10px]"><p className="flex justify-between"><span>播种土地</span><b>{plots.filter(item => item.plantKey).length}/18</b></p><p className="flex justify-between"><span>成熟作物</span><b>{readyCount}</b></p><p className="flex justify-between"><span>仓库收成</span><b>{totalInventory}</b></p></div>
       </div>
 
       <div className="absolute right-2.5 top-[92px] flex flex-col gap-2 sm:right-4 sm:top-[106px]">
@@ -313,15 +331,15 @@ export function FarmGame({ profile }: FarmGameProps) {
       </div>
 
       <AnimatePresence>{panel && <FarmPanel panel={panel} onClose={() => setPanel(null)}>
-        {panel === 'shop' && assets.manifest && <ShopPanel player={player} plant={assets.manifest.plants.sunflower} onBuy={() => buySeed('sunflower')}/>}
-        {panel === 'warehouse' && assets.manifest && <WarehousePanel count={player.inventory.sunflower || 0} sellPrice={assets.manifest.plants.sunflower.sellPrice} onSell={() => sellProduce('sunflower')}/>}
+        {panel === 'shop' && assets.manifest && <ShopPanel player={player} plants={assets.manifest.plants} onBuy={buySeed} onSelect={selectCrop}/>}
+        {panel === 'warehouse' && assets.manifest && <WarehousePanel inventory={player.inventory} plants={assets.manifest.plants} onSell={sellProduce}/>}
         {panel === 'friends' && <FriendsPanel onVisit={name => { setNotice(`正在准备访问${name}的农场，好友互动功能已开启`); setPanel(null) }}/>}
       </FarmPanel>}</AnimatePresence>
     </section>
 
     <div className="mt-4 grid gap-3 sm:grid-cols-3">
-      <InfoStrip icon={<Sprout size={19}/>} title="种子袋" value={`向日葵 × ${player.seeds.sunflower || 0}`} color="bg-emerald-50 text-emerald-700"/>
-      <InfoStrip icon={<PackageOpen size={19}/>} title="今日收成" value={`向日葵 × ${player.inventory.sunflower || 0}`} color="bg-amber-50 text-amber-700"/>
+      <InfoStrip icon={<Sprout size={19}/>} title="当前种子" value={`${selectedPlantName} × ${player.seeds[player.selectedCrop] || 0}`} color="bg-emerald-50 text-emerald-700"/>
+      <InfoStrip icon={<PackageOpen size={19}/>} title="图鉴与收成" value={`12 种作物 · 库存 ${totalInventory}`} color="bg-amber-50 text-amber-700"/>
       <InfoStrip icon={<Sparkles size={19}/>} title="18 块经典土地" value={readyCount ? `${readyCount} 块土地等待收获` : '一切生长正常'} color="bg-sky-50 text-sky-700"/>
     </div>
   </div>
@@ -347,12 +365,12 @@ function FarmPanel({ panel, onClose, children }: { panel: Exclude<Panel, null>; 
   </motion.aside>
 }
 
-function ShopPanel({ player, plant, onBuy }: { player: FarmPlayerState; plant: { name: string; seedPrice: number }; onBuy: () => void }) {
-  return <div><div className="flex items-center gap-3 rounded-2xl border-2 border-[#ead8b6] bg-white p-3"><img src="/assets/plants/sunflower/ready.svg" alt="向日葵" className="size-16"/><div className="min-w-0 flex-1"><b className="text-sm text-[#553922]">{plant.name}种子</b><p className="mt-1 text-[11px] text-[#987650]">成长快，适合新农场主</p><div className="mt-2 flex items-center gap-1 text-xs font-black text-amber-700"><Coins size={14}/>{plant.seedPrice}</div></div></div><button onClick={onBuy} disabled={player.coins < plant.seedPrice} className="mt-3 flex h-11 w-full items-center justify-center gap-2 rounded-2xl bg-[#73b84e] text-sm font-bold text-white shadow-[0_5px_0_#4f8b37] disabled:opacity-45"><ShoppingBasket size={17}/>购买 1 颗</button><p className="mt-4 text-center text-[11px] text-[#9c8060]">种子袋现有 {player.seeds.sunflower || 0} 颗</p></div>
+function ShopPanel({ player, plants, onBuy, onSelect }: { player: FarmPlayerState; plants: Record<string, PlantAsset>; onBuy: (key: string) => void; onSelect: (key: string) => void }) {
+  return <div className="grid grid-cols-2 gap-2">{Object.entries(plants).map(([key, plant]) => <div key={key} className={`rounded-2xl border-2 bg-white p-2.5 ${player.selectedCrop === key ? 'border-[#83bf55] ring-2 ring-emerald-100' : 'border-[#ead8b6]'}`}><button onClick={() => onSelect(key)} className="w-full text-left"><img src={plant.states.ready.image} alt={plant.name} className="mx-auto size-14 object-contain"/><b className="mt-1 block text-xs text-[#553922]">{plant.name}</b><p className="mt-0.5 text-[9px] text-[#987650]">现有种子 × {player.seeds[key] || 0}</p></button><div className="mt-2 flex items-center justify-between"><span className="flex items-center gap-1 text-[10px] font-black text-amber-700"><Coins size={12}/>{plant.seedPrice}</span><button onClick={() => onBuy(key)} disabled={player.coins < plant.seedPrice} aria-label={`购买${plant.name}种子`} className="grid size-7 place-items-center rounded-lg bg-[#73b84e] text-white disabled:opacity-40"><ShoppingBasket size={13}/></button></div></div>)}</div>
 }
 
-function WarehousePanel({ count, sellPrice, onSell }: { count: number; sellPrice: number; onSell: () => void }) {
-  return <div><div className="flex items-center gap-3 rounded-2xl border-2 border-[#ead8b6] bg-white p-3"><img src="/assets/plants/sunflower/harvest.svg" alt="向日葵收成" className="size-16"/><div className="flex-1"><b className="text-sm text-[#553922]">向日葵</b><p className="mt-1 text-xs text-[#987650]">库存 × {count}</p><p className="mt-2 text-xs font-black text-amber-700">售价 {sellPrice} 金币/朵</p></div></div><button onClick={onSell} disabled={!count} className="mt-3 flex h-11 w-full items-center justify-center gap-2 rounded-2xl bg-[#e5a83e] text-sm font-bold text-white shadow-[0_5px_0_#b47827] disabled:opacity-45"><Coins size={17}/>全部出售</button></div>
+function WarehousePanel({ inventory, plants, onSell }: { inventory: Record<string, number>; plants: Record<string, PlantAsset>; onSell: (key: string) => void }) {
+  return <div className="space-y-2">{Object.entries(plants).map(([key, plant]) => <div key={key} className="flex items-center gap-2 rounded-2xl border border-[#ead8b6] bg-white p-2.5"><img src={plant.states.harvest.image} alt={`${plant.name}收成`} className="size-11 object-contain"/><div className="min-w-0 flex-1"><b className="text-xs text-[#553922]">{plant.name}</b><p className="mt-0.5 text-[9px] text-[#987650]">库存 × {inventory[key] || 0} · 售价 {plant.sellPrice}</p></div><button onClick={() => onSell(key)} disabled={!inventory[key]} aria-label={`出售全部${plant.name}`} className="rounded-lg bg-[#e5a83e] px-2.5 py-2 text-[10px] font-bold text-white disabled:opacity-35">出售</button></div>)}</div>
 }
 
 function FriendsPanel({ onVisit }: { onVisit: (name: string) => void }) {

@@ -14,9 +14,17 @@ const defaultPlayer: AquariumPlayer = { level: 1, experience: 18, shells: 880, f
 function makeDefaultCreatures(): AquariumCreature[] {
   const acquiredAt = new Date().toISOString()
   return [
-    ['clownfish', .28, .43, 88], ['blueTang', .56, .34, 76], ['jellyfish', .79, .25, 92],
-    ['seahorse', .18, .67, 64], ['greenTurtle', .73, .65, 82], ['starfish', .48, .86, 70],
+    ['clownfish', .17, .39, 88], ['blueTang', .38, .28, 76], ['jellyfish', .68, .20, 92],
+    ['seahorse', .13, .66, 64], ['greenTurtle', .79, .61, 82], ['starfish', .42, .87, 70],
+    ['angelfish', .56, .40, 86], ['butterflyfish', .83, .32, 74], ['pufferfish', .28, .56, 90],
+    ['mantaRay', .51, .65, 81], ['reefShark', .69, .48, 77], ['octopus', .73, .82, 85],
+    ['crab', .17, .86, 68], ['lobster', .58, .86, 72], ['dolphin', .49, .17, 94],
   ].map(([speciesKey, x, y, hunger]) => ({ id: crypto.randomUUID(), speciesKey, nickname: '', hunger, health: 100, x, y, acquiredAt } as AquariumCreature))
+}
+
+function mergeDefaultCreatures(saved: AquariumCreature[]) {
+  const existingSpecies = new Set(saved.map(creature => creature.speciesKey))
+  return [...saved, ...makeDefaultCreatures().filter(creature => !existingSpecies.has(creature.speciesKey))]
 }
 
 function readLocalAquarium() {
@@ -37,7 +45,7 @@ export function AquariumGame({ profile }: AquariumGameProps) {
   const assets = useAquariumAssets()
   const local = useMemo(readLocalAquarium, [])
   const [player, setPlayer] = useState<AquariumPlayer>(local?.player ?? defaultPlayer)
-  const [creatures, setCreatures] = useState<AquariumCreature[]>(local?.creatures ?? makeDefaultCreatures)
+  const [creatures, setCreatures] = useState<AquariumCreature[]>(local?.creatures ? mergeDefaultCreatures(local.creatures) : makeDefaultCreatures)
   const [notice, setNotice] = useState(local?.notice ?? '水质清澈，所有生物状态正常')
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const [catalogOpen, setCatalogOpen] = useState(false)
@@ -52,7 +60,7 @@ export function AquariumGame({ profile }: AquariumGameProps) {
       if (!active) return
       if (data.state) setPlayer({ level: Number(data.state.level), experience: Number(data.state.experience), shells: Number(data.state.shells), food: Number(data.state.food) })
       if (data.state?.notice) setNotice(data.state.notice)
-      if (data.creatures.length) setCreatures(data.creatures.map((creature: any) => ({
+      if (data.creatures.length) setCreatures(mergeDefaultCreatures(data.creatures.map((creature: any) => ({
         id: creature.id,
         speciesKey: creature.species_key,
         nickname: creature.nickname,
@@ -61,9 +69,9 @@ export function AquariumGame({ profile }: AquariumGameProps) {
         x: Number(creature.position_x),
         y: Number(creature.position_y),
         acquiredAt: creature.acquired_at,
-      })))
+      }))))
       setReady(true)
-    }).catch(error => { setNotice(error instanceof Error ? `海洋馆读取失败：${error.message}` : '海洋馆读取失败'); setSaveStatus('error') })
+    }).catch(error => { setNotice(error instanceof Error ? `海洋馆读取失败：${error.message}` : '海洋馆读取失败'); setSaveStatus('error'); setReady(true) })
     return () => { active = false }
   }, [])
 

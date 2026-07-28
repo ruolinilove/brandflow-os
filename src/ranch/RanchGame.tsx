@@ -17,11 +17,18 @@ function makeDefaultAnimals(): RanchAnimal[] {
   const definitions: Array<[string, number, number, number, number]> = [
     ['cow', .42, .67, 86, 520], ['sheep', .57, .56, 72, 260], ['pig', .29, .70, 81, 170],
     ['chicken', .68, .70, 90, 370], ['duck', .82, .72, 76, 410], ['rabbit', .51, .65, 68, 190],
+    ['goat', .40, .54, 84, 330], ['horse', .63, .48, 78, 610], ['alpaca', .30, .58, 74, 430],
+    ['goose', .88, .66, 89, 290], ['deer', .75, .54, 80, 690], ['bee', .57, .42, 93, 450],
   ]
   return definitions.map(([speciesKey, x, y, hunger, elapsedSeconds]) => ({
     id: crypto.randomUUID(), speciesKey, nickname: '', hunger, health: 100, x, y,
     productionStartedAt: new Date(now - elapsedSeconds * 1000).toISOString(), acquiredAt: new Date(now - 86400000).toISOString(),
   }))
+}
+
+function mergeDefaultAnimals(saved: RanchAnimal[]) {
+  const existingSpecies = new Set(saved.map(animal => animal.speciesKey))
+  return [...saved, ...makeDefaultAnimals().filter(animal => !existingSpecies.has(animal.speciesKey))]
 }
 
 function readLocalRanch() {
@@ -54,7 +61,7 @@ export function RanchGame({ profile }: RanchGameProps) {
   const assets = useRanchAssets()
   const local = useMemo(readLocalRanch, [])
   const [player, setPlayer] = useState<RanchPlayer>(local?.player ?? defaultPlayer)
-  const [animals, setAnimals] = useState<RanchAnimal[]>(local?.animals ?? makeDefaultAnimals)
+  const [animals, setAnimals] = useState<RanchAnimal[]>(local?.animals ? mergeDefaultAnimals(local.animals) : makeDefaultAnimals)
   const [notice, setNotice] = useState(local?.notice ?? '动物们正在牧场里悠闲活动')
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const [panel, setPanel] = useState<SidePanel>(null)
@@ -73,11 +80,11 @@ export function RanchGame({ profile }: RanchGameProps) {
         feed: Number(data.state.feed), inventory: data.state.inventory || {},
       })
       if (data.state?.notice) setNotice(data.state.notice)
-      if (data.animals.length) setAnimals(data.animals.map((animal: any) => ({
+      if (data.animals.length) setAnimals(mergeDefaultAnimals(data.animals.map((animal: any) => ({
         id: animal.id, speciesKey: animal.species_key, nickname: animal.nickname, hunger: Number(animal.hunger),
         health: Number(animal.health), x: Number(animal.position_x), y: Number(animal.position_y),
         productionStartedAt: animal.production_started_at, acquiredAt: animal.acquired_at,
-      })))
+      }))))
       setReady(true)
     }).catch(error => { setNotice(error instanceof Error ? `牧场读取失败：${error.message}` : '牧场读取失败'); setSaveStatus('error'); setReady(true) })
     return () => { active = false }

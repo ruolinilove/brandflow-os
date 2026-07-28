@@ -1,30 +1,44 @@
 {
   "background": "/assets/background/farm-scene.svg",
-  "animals": {
-    "chicken": "/assets/animals/chicken.svg"
-  },
-  "ui": {
-    "coin": "/assets/ui/coin.svg"
-  },
-  "effects": {
-    "sparkle": "/assets/effects/sparkle.svg"
-  },
+  "animals": { "chicken": "/assets/animals/chicken.svg" },
+  "ui": { "coin": "/assets/ui/coin.svg" },
+  "effects": { "sparkle": "/assets/effects/sparkle.svg" },
   "plants": {
-    "sunflower": {
-      "name": "向日葵",
-      "seedPrice": 15,
-      "harvestCoins": 20,
-      "harvestExperience": 5,
-      "sellPrice": 12,
-      "states": {
-        "seed": { "image": "/assets/plants/sunflower/seed.svg", "durationMs": 2500, "animation": "blink" },
-        "sprout": { "image": "/assets/plants/sunflower/sprout.svg", "durationMs": 4000, "animation": "sway" },
-        "small": { "image": "/assets/plants/sunflower/small.svg", "durationMs": 5000, "animation": "sway" },
-        "medium": { "image": "/assets/plants/sunflower/medium.svg", "durationMs": 6000, "animation": "grow" },
-        "large": { "image": "/assets/plants/sunflower/large.svg", "durationMs": 7000, "animation": "grow" },
-        "ready": { "image": "/assets/plants/sunflower/ready.svg", "durationMs": 0, "animation": "ready" },
-        "harvest": { "image": "/assets/plants/sunflower/harvest.svg", "durationMs": 650, "animation": "harvest" }
-      }
-    }
+    "sunflower": { "name": "向日葵", "seedPrice": 15, "harvestCoins": 20, "harvestExperience": 5, "sellPrice": 12, "states": {
+      "seed": { "image": "/assets/plants/sunflower/seed.svg", "durationMs": 2500, "animation": "blink" }, "sprout": { "image": "/assets/plants/sunflower/sprout.svg", "durationMs": 4000, "animation": "sway" }, "small": { "image": "/assets/plants/sunflower/small.svg", "durationMs": 5000, "animation": "sway" }, "medium": { "image": "/assets/plants/sunflower/medium.svg", "durationMs": 6000, "animation": "grow" }, "large": { "image": "/assets/plants/sunflower/large.svg", "durationMs": 7000, "animation": "grow" }, "ready": { "image": "/assets/plants/sunflower/ready.svg", "durationMs": 0, "animation": "ready" }, "harvest": { "image": "/assets/plants/sunflower/harvest.svg", "durationMs": 650, "animation": "harvest" }
+    } },
+    "tomato": { "name": "番茄", "seedPrice": 18, "harvestCoins": 26, "harvestExperience": 6, "sellPrice": 16, "states": {
+      "seed": { "image": "/assets/plants/sunflower/seed.svg", "durationMs": 2800, "animation": "blink" }, "sprout": { "image": "/assets/plants/sunflower/sprout.svg", "durationMs": 4300, "animation": "sway" }, "small": { "image": "/assets/plants/sunflower/small.svg", "durationMs": 5200, "animation": "sway" }, "medium": { "image": "/assets/plants/crops/tomato.svg", "durationMs": 6500, "animation": "grow" }, "large": { "image": "/assets/plants/crops/tomato.svg", "durationMs": 7500, "animation": "grow" }, "ready": { "image": "/assets/plants/crops/tomato.svg", "durationMs": 0, "animation": "ready" }, "harvest": { "image": "/assets/plants/crops/tomato.svg", "durationMs": 650, "animation": "harvest" }
+    } },
+    "strawberry": { "name": "草莓", "seedPrice": 22, "harvestCoins": 32, "harvestExperience": 7, "sellPrice": 20, "states": {
+      "seed": { "image": "/assets/plants/sunflower/seed.svg", "durationMs": 3000, "animation": "blink" }, "sprout": { "image": "/assets/plants/sunflower/sprout.svg", "durationMs": 4500, "animation": "sway" }, "small": { "image": "/assets/plants/sunflower/small.svg", "durationMs": 5600, "animation": "sway" }, "medium": { "image": "/assets/plants/crops/strawberry.svg", "durationMs": 6800, "animation": "grow" }, "large": { "image": "/assets/plants/crops/strawberry.svg", "durationMs": 7800, "animation": "grow" }, "ready": { "image": "/assets/plants/crops/strawberry.svg", "durationMs": 0, "animation": "ready" }, "harvest": { "image": "/assets/plants/crops/strawberry.svg", "durationMs": 650, "animation": "harvest" }
+    } },
+    "corn": { "name": "玉米", "seedPrice": 25, "harvestCoins": 36, "harvestExperience": 8, "sellPrice": 23, "states": {
+      "seed": { "image": "/assets/plants/sunflower/seed.svg", "durationMs": 3200, "animation": "blink" }, "sprout": { "image": "/assets/plants/sunflower/sprout.svg", "durationMs": 4700, "animation": "sway" }, "small": { "image": "/assets/plants/sunflower/small.svg", "durationMs": 5800, "animation": "sway" }, "medium": { "image": "/assets/plants/crops/corn.svg", "durationMs": 7200, "animation": "grow" }, "large": { "image": "/assets/plants/crops/corn.svg", "durationMs": 8200, "animation": "grow" }, "ready": { "image": "/assets/plants/crops/corn.svg", "durationMs": 0, "animation": "ready" }, "harvest": { "image": "/assets/plants/crops/corn.svg", "durationMs": 650, "animation": "harvest" }
+    } },
+    "carrot": { "name": "胡萝卜", "seedPrice": 28, "harvestCoins": 40, "harvestExperience": 9, "sellPrice": 26, "states": {
+      "seed": { "image": "/assets/plants/sunflower/seed.svg", "durationMs": 3400, "animation": "blink" }, "sprout": { "image": "/assets/plants/sunflower/sprout.svg", "durationMs": 4900, "animation": "sway" }, "small": { "image": "/assets/plants/sunflower/small.svg", "durationMs": 6000, "animation": "sway" }, "medium": { "image": "/assets/plants/crops/carrot.svg", "durationMs": 7400, "animation": "grow" }, "large": { "image": "/assets/plants/crops/carrot.svg", "durationMs": 8400, "animation": "grow" }, "ready": { "image": "/assets/plants/crops/carrot.svg", "durationMs": 0, "animation": "ready" }, "harvest": { "image": "/assets/plants/crops/carrot.svg", "durationMs": 650, "animation": "harvest" }
+    } },
+    "pumpkin": { "name": "南瓜", "seedPrice": 34, "harvestCoins": 48, "harvestExperience": 10, "sellPrice": 31, "states": {
+      "seed": { "image": "/assets/plants/sunflower/seed.svg", "durationMs": 3700, "animation": "blink" }, "sprout": { "image": "/assets/plants/sunflower/sprout.svg", "durationMs": 5200, "animation": "sway" }, "small": { "image": "/assets/plants/sunflower/small.svg", "durationMs": 6400, "animation": "sway" }, "medium": { "image": "/assets/plants/crops/pumpkin.svg", "durationMs": 7800, "animation": "grow" }, "large": { "image": "/assets/plants/crops/pumpkin.svg", "durationMs": 9000, "animation": "grow" }, "ready": { "image": "/assets/plants/crops/pumpkin.svg", "durationMs": 0, "animation": "ready" }, "harvest": { "image": "/assets/plants/crops/pumpkin.svg", "durationMs": 650, "animation": "harvest" }
+    } },
+    "watermelon": { "name": "西瓜", "seedPrice": 38, "harvestCoins": 54, "harvestExperience": 11, "sellPrice": 35, "states": {
+      "seed": { "image": "/assets/plants/sunflower/seed.svg", "durationMs": 3900, "animation": "blink" }, "sprout": { "image": "/assets/plants/sunflower/sprout.svg", "durationMs": 5400, "animation": "sway" }, "small": { "image": "/assets/plants/sunflower/small.svg", "durationMs": 6600, "animation": "sway" }, "medium": { "image": "/assets/plants/crops/watermelon.svg", "durationMs": 8100, "animation": "grow" }, "large": { "image": "/assets/plants/crops/watermelon.svg", "durationMs": 9300, "animation": "grow" }, "ready": { "image": "/assets/plants/crops/watermelon.svg", "durationMs": 0, "animation": "ready" }, "harvest": { "image": "/assets/plants/crops/watermelon.svg", "durationMs": 650, "animation": "harvest" }
+    } },
+    "eggplant": { "name": "茄子", "seedPrice": 42, "harvestCoins": 60, "harvestExperience": 12, "sellPrice": 39, "states": {
+      "seed": { "image": "/assets/plants/sunflower/seed.svg", "durationMs": 4100, "animation": "blink" }, "sprout": { "image": "/assets/plants/sunflower/sprout.svg", "durationMs": 5600, "animation": "sway" }, "small": { "image": "/assets/plants/sunflower/small.svg", "durationMs": 6800, "animation": "sway" }, "medium": { "image": "/assets/plants/crops/eggplant.svg", "durationMs": 8400, "animation": "grow" }, "large": { "image": "/assets/plants/crops/eggplant.svg", "durationMs": 9600, "animation": "grow" }, "ready": { "image": "/assets/plants/crops/eggplant.svg", "durationMs": 0, "animation": "ready" }, "harvest": { "image": "/assets/plants/crops/eggplant.svg", "durationMs": 650, "animation": "harvest" }
+    } },
+    "cabbage": { "name": "卷心菜", "seedPrice": 46, "harvestCoins": 66, "harvestExperience": 13, "sellPrice": 43, "states": {
+      "seed": { "image": "/assets/plants/sunflower/seed.svg", "durationMs": 4300, "animation": "blink" }, "sprout": { "image": "/assets/plants/sunflower/sprout.svg", "durationMs": 5800, "animation": "sway" }, "small": { "image": "/assets/plants/sunflower/small.svg", "durationMs": 7000, "animation": "sway" }, "medium": { "image": "/assets/plants/crops/cabbage.svg", "durationMs": 8700, "animation": "grow" }, "large": { "image": "/assets/plants/crops/cabbage.svg", "durationMs": 9900, "animation": "grow" }, "ready": { "image": "/assets/plants/crops/cabbage.svg", "durationMs": 0, "animation": "ready" }, "harvest": { "image": "/assets/plants/crops/cabbage.svg", "durationMs": 650, "animation": "harvest" }
+    } },
+    "chili": { "name": "辣椒", "seedPrice": 50, "harvestCoins": 72, "harvestExperience": 14, "sellPrice": 47, "states": {
+      "seed": { "image": "/assets/plants/sunflower/seed.svg", "durationMs": 4500, "animation": "blink" }, "sprout": { "image": "/assets/plants/sunflower/sprout.svg", "durationMs": 6000, "animation": "sway" }, "small": { "image": "/assets/plants/sunflower/small.svg", "durationMs": 7200, "animation": "sway" }, "medium": { "image": "/assets/plants/crops/chili.svg", "durationMs": 9000, "animation": "grow" }, "large": { "image": "/assets/plants/crops/chili.svg", "durationMs": 10200, "animation": "grow" }, "ready": { "image": "/assets/plants/crops/chili.svg", "durationMs": 0, "animation": "ready" }, "harvest": { "image": "/assets/plants/crops/chili.svg", "durationMs": 650, "animation": "harvest" }
+    } },
+    "grape": { "name": "葡萄", "seedPrice": 56, "harvestCoins": 82, "harvestExperience": 16, "sellPrice": 54, "states": {
+      "seed": { "image": "/assets/plants/sunflower/seed.svg", "durationMs": 4800, "animation": "blink" }, "sprout": { "image": "/assets/plants/sunflower/sprout.svg", "durationMs": 6300, "animation": "sway" }, "small": { "image": "/assets/plants/sunflower/small.svg", "durationMs": 7500, "animation": "sway" }, "medium": { "image": "/assets/plants/crops/grape.svg", "durationMs": 9400, "animation": "grow" }, "large": { "image": "/assets/plants/crops/grape.svg", "durationMs": 10800, "animation": "grow" }, "ready": { "image": "/assets/plants/crops/grape.svg", "durationMs": 0, "animation": "ready" }, "harvest": { "image": "/assets/plants/crops/grape.svg", "durationMs": 650, "animation": "harvest" }
+    } },
+    "pineapple": { "name": "菠萝", "seedPrice": 64, "harvestCoins": 94, "harvestExperience": 18, "sellPrice": 62, "states": {
+      "seed": { "image": "/assets/plants/sunflower/seed.svg", "durationMs": 5200, "animation": "blink" }, "sprout": { "image": "/assets/plants/sunflower/sprout.svg", "durationMs": 6700, "animation": "sway" }, "small": { "image": "/assets/plants/sunflower/small.svg", "durationMs": 7900, "animation": "sway" }, "medium": { "image": "/assets/plants/crops/pineapple.svg", "durationMs": 9900, "animation": "grow" }, "large": { "image": "/assets/plants/crops/pineapple.svg", "durationMs": 11400, "animation": "grow" }, "ready": { "image": "/assets/plants/crops/pineapple.svg", "durationMs": 0, "animation": "ready" }, "harvest": { "image": "/assets/plants/crops/pineapple.svg", "durationMs": 650, "animation": "harvest" }
+    } }
   }
 }
