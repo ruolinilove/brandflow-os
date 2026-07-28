@@ -1,0 +1,11 @@
+{
+  "background": "/assets/aquarium/background/ocean-room.svg",
+  "creatures": {
+    "clownfish": { "name": "小丑鱼", "scientificName": "Amphiprioninae", "image": "/assets/aquarium/creatures/clownfish.svg", "speed": 34, "size": 76, "food": "颗粒饲料", "zone": "reef" },
+    "blueTang": { "name": "蓝倒吊", "scientificName": "Paracanthurus hepatus", "image": "/assets/aquarium/creatures/blue-tang.svg", "speed": 42, "size": 86, "food": "海藻片", "zone": "open" },
+    "jellyfish": { "name": "海月水母", "scientificName": "Aurelia aurita", "image": "/assets/aquarium/creatures/jellyfish.svg", "speed": 12, "size": 94, "food": "浮游生物", "zone": "upper" },
+    "seahorse": { "name": "黄海马", "scientificName": "Hippocampus kuda", "image": "/assets/aquarium/creatures/seahorse.svg", "speed": 9, "size": 88, "food": "丰年虾", "zone": "reef" },
+    "greenTurtle": { "name": "绿海龟", "scientificName": "Chelonia mydas", "image": "/assets/aquarium/creatures/green-turtle.svg", "speed": 24, "size": 126, "food": "海草", "zone": "open" },
+    "starfish": { "name": "太阳海星", "scientificName": "Solasteridae", "image": "/assets/aquarium/creatures/starfish.svg", "speed": 2, "size": 70, "food": "贝类碎肉", "zone": "bottom" }
+  }
+}

@@ -5,7 +5,7 @@ import type { Session } from '@supabase/supabase-js'
 import {
   Activity, ArrowLeftRight, ArrowUpRight, Bell, CalendarDays, CheckCircle2, Copy,
   ChevronDown, CircleDashed, Crown, Database, Download, FileChartColumn, FileText,
-  Droplets, Flower2, FolderKanban, HardDrive, House, Images, LayoutDashboard,
+  Droplets, Fish, Flower2, FolderKanban, HardDrive, House, Images, LayoutDashboard,
   KeyRound, Lightbulb, LogOut, MapPinned, Menu, MoreHorizontal, Play, Plus, Search, Settings, Share2,
   ShieldCheck, Sparkles, Sprout, Sun, Trash2, TrendingUp, Trophy, Upload, UserCog, Users,
   WandSparkles, X,
@@ -17,6 +17,7 @@ import {
 import { isSupabaseConfigured, supabase } from './lib/supabase'
 import { NearbyFood } from './NearbyFood'
 import { FarmGame } from './farm/FarmGame'
+import { AquariumGame } from './aquarium/AquariumGame'
 import {
   assetsDb, bootstrapBrandFlow, contentsDb, createBrandFlowInvite, deleteMetric, deleteMetrics,
   getBrandFlowAccessRole, ideasDb, isBrandFlowAuthorized, listBrandFlowInvites, listBrandFlowUsers,
@@ -26,7 +27,7 @@ import {
 } from './lib/brandflow-db'
 
 type BrandId = 'brandA' | 'brandB'
-type PageId = 'dashboard' | 'plan' | 'projects' | 'content' | 'data' | 'assets' | 'ideas' | 'garden' | 'food' | 'ai' | 'admin' | 'settings'
+type PageId = 'dashboard' | 'plan' | 'projects' | 'content' | 'data' | 'assets' | 'ideas' | 'garden' | 'aquarium' | 'food' | 'ai' | 'admin' | 'settings'
 type BrandConfig = Record<BrandId, string>
 type MetricEntry = { id: string; date: string; brand: BrandId; contentName: string; views: number; shares: number; followers: number }
 type UserProfile = { displayName: string; jobTitle: string; avatarUrl: string | null }
@@ -44,7 +45,7 @@ const defaultEntries: MetricEntry[] = [
 const navItems = [
   ['dashboard','首页',House],['plan','工作计划',CalendarDays],['projects','项目中心',FolderKanban],
   ['content','内容中心',FileText],['data','数据中心',Database],['assets','素材中心',Images],
-  ['ideas','灵感中心',Lightbulb],['garden','我的花园',Flower2],['food','附近美食',MapPinned],['ai','AI中心',Sparkles],
+  ['ideas','灵感中心',Lightbulb],['garden','我的花园',Flower2],['aquarium','我的海洋馆',Fish],['food','附近美食',MapPinned],['ai','AI中心',Sparkles],
   ['admin','管理员设置',UserCog],['settings','设置',Settings],
 ] as const
 
@@ -202,7 +203,7 @@ function App(){
         {dataLoading&&<div className="mb-4 h-1 overflow-hidden rounded-full bg-emerald-100"><motion.div className="h-full w-1/3 rounded-full bg-[#8dcc65]" animate={{x:['-100%','300%']}} transition={{duration:1.2,repeat:Infinity,ease:'easeInOut'}}/></div>}
         <AnimatePresence mode="wait">
           <motion.div key={page} variants={pageMotion} initial="hidden" animate="show" exit={{opacity:0,y:-8,transition:{duration:.18}}}>
-            {page==='dashboard'&&<Dashboard {...pageProps}/>} {page==='plan'&&<WorkPlan/>} {page==='projects'&&<ProjectCenter/>} {page==='content'&&<ContentCenter/>} {page==='data'&&<DataCenter {...pageProps}/>} {page==='assets'&&<Assets/>} {page==='ideas'&&<IdeasCenter/>} {page==='garden'&&<FarmGame profile={profile}/>} {page==='food'&&<NearbyFood/>} {page==='ai'&&<AiPage/>} {page==='admin'&&<AdminSettingsPage accessRole={accessRole}/>} {page==='settings'&&<SettingsPage profile={profile} onSaveProfile={savePersonalProfile} accessRole={accessRole}/>}
+            {page==='dashboard'&&<Dashboard {...pageProps}/>} {page==='plan'&&<WorkPlan/>} {page==='projects'&&<ProjectCenter/>} {page==='content'&&<ContentCenter/>} {page==='data'&&<DataCenter {...pageProps}/>} {page==='assets'&&<Assets/>} {page==='ideas'&&<IdeasCenter/>} {page==='garden'&&<FarmGame profile={profile}/>} {page==='aquarium'&&<AquariumGame profile={profile}/>} {page==='food'&&<NearbyFood/>} {page==='ai'&&<AiPage/>} {page==='admin'&&<AdminSettingsPage accessRole={accessRole}/>} {page==='settings'&&<SettingsPage profile={profile} onSaveProfile={savePersonalProfile} accessRole={accessRole}/>}
           </motion.div>
         </AnimatePresence>
       </main>
@@ -214,8 +215,8 @@ function Sidebar({page,setPage,open,setOpen}:{page:PageId;setPage:(p:PageId)=>vo
   return <motion.aside initial={false} animate={{x:open?0:undefined}} className={`fixed inset-y-3 left-3 z-40 flex w-[244px] flex-col rounded-[28px] border border-white bg-white/95 p-4 shadow-[0_24px_70px_rgba(54,84,72,0.12)] backdrop-blur-xl transition-transform lg:translate-x-0 ${open?'translate-x-0':'-translate-x-[110%]'}`}>
     <div className="flex h-14 items-center gap-3 px-2"><div className="grid size-10 place-items-center rounded-2xl bg-[#9ad66f] font-black text-white shadow-lg shadow-lime-200">B</div><div><strong className="block text-[17px] tracking-tight">BrandFlow</strong><span className="text-[10px] font-medium text-slate-400">PERSONAL DATA OS</span></div><button aria-label="关闭导航" onClick={()=>setOpen(false)} className="ml-auto grid size-9 place-items-center rounded-xl text-slate-500 hover:bg-slate-100 lg:hidden"><X size={18}/></button></div>
     <div className="my-5 rounded-2xl bg-[#f3f7f2] p-3"><p className="text-xs font-semibold text-slate-700">贵州创艺装饰</p><p className="mt-1 text-[10px] text-slate-400">个人品牌工作空间</p></div>
-    <nav className="space-y-1.5">{navItems.map(([id,label,Icon])=><motion.button whileHover={{x:3}} whileTap={{scale:.98}} key={id} onClick={()=>{setPage(id);setOpen(false)}} className={`flex h-11 w-full items-center gap-3 rounded-2xl px-3 text-sm font-medium transition ${page===id?'bg-[#dff2d6] text-[#2d6b35] shadow-sm':'text-slate-500 hover:bg-slate-50 hover:text-slate-900'}`}><Icon size={18}/><span>{label}</span>{page===id&&<motion.i layoutId="nav-dot" className="ml-auto size-1.5 rounded-full bg-[#67bb43]"/>}</motion.button>)}</nav>
-    <div className="mt-auto rounded-3xl bg-[#eef5eb] p-4"><div className="flex items-center gap-2 text-sm font-semibold"><HardDrive size={16} className="text-[#67a756]"/>存储空间</div><div className="mt-4 h-2 overflow-hidden rounded-full bg-white"><motion.div initial={{width:0}} animate={{width:'68%'}} transition={{duration:1,ease:'easeOut'}} className="h-full rounded-full bg-[#8dcc65]"/></div><div className="mt-2 flex justify-between text-[10px] text-slate-400"><span>34.2 GB / 50 GB</span><b className="text-slate-600">68%</b></div></div>
+    <nav className="min-h-0 flex-1 space-y-1.5 overflow-y-auto pr-1">{navItems.map(([id,label,Icon])=><motion.button whileHover={{x:3}} whileTap={{scale:.98}} key={id} onClick={()=>{setPage(id);setOpen(false)}} className={`flex h-11 w-full shrink-0 items-center gap-3 rounded-2xl px-3 text-sm font-medium transition ${page===id?'bg-[#dff2d6] text-[#2d6b35] shadow-sm':'text-slate-500 hover:bg-slate-50 hover:text-slate-900'}`}><Icon size={18}/><span>{label}</span>{page===id&&<motion.i layoutId="nav-dot" className="ml-auto size-1.5 rounded-full bg-[#67bb43]"/>}</motion.button>)}</nav>
+    <div className="mt-4 shrink-0 rounded-3xl bg-[#eef5eb] p-4"><div className="flex items-center gap-2 text-sm font-semibold"><HardDrive size={16} className="text-[#67a756]"/>存储空间</div><div className="mt-4 h-2 overflow-hidden rounded-full bg-white"><motion.div initial={{width:0}} animate={{width:'68%'}} transition={{duration:1,ease:'easeOut'}} className="h-full rounded-full bg-[#8dcc65]"/></div><div className="mt-2 flex justify-between text-[10px] text-slate-400"><span>34.2 GB / 50 GB</span><b className="text-slate-600">68%</b></div></div>
   </motion.aside>
 }
 

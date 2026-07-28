@@ -353,6 +353,43 @@ export async function saveFarmGame(state: {
   if (plotsResult.error) throw plotsResult.error
 }
 
+export async function loadAquarium() {
+  const client = requireSupabase()
+  const [stateResult, creaturesResult] = await Promise.all([
+    client.from('aquarium_state').select('*').maybeSingle(),
+    client.from('aquarium_creatures').select('*').order('acquired_at'),
+  ])
+  if (stateResult.error) throw stateResult.error
+  if (creaturesResult.error) throw creaturesResult.error
+  return { state: stateResult.data, creatures: creaturesResult.data || [] }
+}
+
+export async function saveAquarium(state: {
+  level: number
+  experience: number
+  shells: number
+  food: number
+  notice: string
+}, creatures: Array<{
+  id: string
+  species_key: string
+  nickname: string
+  hunger: number
+  health: number
+  position_x: number
+  position_y: number
+  acquired_at: string
+}>) {
+  const client = requireSupabase()
+  const ownerId = await currentUserId()
+  const [stateResult, creaturesResult] = await Promise.all([
+    client.from('aquarium_state').upsert({ owner_id: ownerId, ...state }),
+    client.from('aquarium_creatures').upsert(creatures.map(creature => ({ owner_id: ownerId, ...creature }))),
+  ])
+  if (stateResult.error) throw stateResult.error
+  if (creaturesResult.error) throw creaturesResult.error
+}
+
 export async function uploadAsset(file: File) {
   const client = requireSupabase()
   const ownerId = await currentUserId()
