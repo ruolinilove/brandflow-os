@@ -1,0 +1,30 @@
+{
+  "background": "/assets/background/farm-scene.svg",
+  "animals": {
+    "chicken": "/assets/animals/chicken.svg"
+  },
+  "ui": {
+    "coin": "/assets/ui/coin.svg"
+  },
+  "effects": {
+    "sparkle": "/assets/effects/sparkle.svg"
+  },
+  "plants": {
+    "sunflower": {
+      "name": "向日葵",
+      "seedPrice": 15,
+      "harvestCoins": 20,
+      "harvestExperience": 5,
+      "sellPrice": 12,
+      "states": {
+        "seed": { "image": "/assets/plants/sunflower/seed.svg", "durationMs": 2500, "animation": "blink" },
+        "sprout": { "image": "/assets/plants/sunflower/sprout.svg", "durationMs": 4000, "animation": "sway" },
+        "small": { "image": "/assets/plants/sunflower/small.svg", "durationMs": 5000, "animation": "sway" },
+        "medium": { "image": "/assets/plants/sunflower/medium.svg", "durationMs": 6000, "animation": "grow" },
+        "large": { "image": "/assets/plants/sunflower/large.svg", "durationMs": 7000, "animation": "grow" },
+        "ready": { "image": "/assets/plants/sunflower/ready.svg", "durationMs": 0, "animation": "ready" },
+        "harvest": { "image": "/assets/plants/sunflower/harvest.svg", "durationMs": 650, "animation": "harvest" }
+      }
+    }
+  }
+}

@@ -303,6 +303,56 @@ export async function saveGarden(state: { water: number; coins: number; notice: 
   if (plotsResult.error) throw plotsResult.error
 }
 
+export async function loadFarmGame() {
+  const client = requireSupabase()
+  const [stateResult, plotsResult] = await Promise.all([
+    client.from('garden_state').select('coins,level,experience,seeds,inventory,selected_crop').single(),
+    client.from('garden_plots').select('position,flower,stage,color,plant_key,growth_state,planted_at').order('position'),
+  ])
+  return {
+    state: assertData(stateResult.data, stateResult.error),
+    plots: assertData(plotsResult.data, plotsResult.error),
+  }
+}
+
+export async function saveFarmGame(state: {
+  coins: number
+  level: number
+  experience: number
+  seeds: Record<string, number>
+  inventory: Record<string, number>
+  selected_crop: string
+}, plots: Array<{
+  position: number
+  plant_key: string | null
+  growth_state: string | null
+  planted_at: string | null
+}>) {
+  const client = requireSupabase()
+  const ownerId = await currentUserId()
+  const rows = plots.map(plot => {
+    const occupied = Boolean(plot.plant_key)
+    const persistedState = plot.growth_state === 'harvest' ? 'ready' : plot.growth_state
+    const legacyStage = !occupied ? null : persistedState === 'ready' ? 3 : persistedState === 'medium' || persistedState === 'large' ? 2 : 1
+    return {
+      owner_id: ownerId,
+      position: plot.position,
+      plant_key: plot.plant_key,
+      growth_state: persistedState,
+      planted_at: plot.planted_at,
+      flower: occupied ? '向日葵' : null,
+      stage: legacyStage,
+      color: occupied ? '#f4b942' : null,
+    }
+  })
+  const [stateResult, plotsResult] = await Promise.all([
+    client.from('garden_state').upsert({ owner_id: ownerId, ...state }),
+    client.from('garden_plots').upsert(rows, { onConflict: 'owner_id,position' }),
+  ])
+  if (stateResult.error) throw stateResult.error
+  if (plotsResult.error) throw plotsResult.error
+}
+
 export async function uploadAsset(file: File) {
   const client = requireSupabase()
   const ownerId = await currentUserId()

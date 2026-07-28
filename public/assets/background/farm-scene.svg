@@ -1,0 +1,27 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="720" viewBox="0 0 1200 720">
+  <defs>
+    <linearGradient id="sky" x1="0" y1="0" x2="0" y2="1"><stop stop-color="#8ed4ee"/><stop offset="1" stop-color="#dff4ef"/></linearGradient>
+    <linearGradient id="grass" x1="0" y1="0" x2="0" y2="1"><stop stop-color="#93cf69"/><stop offset="1" stop-color="#4e9a53"/></linearGradient>
+  </defs>
+  <rect width="1200" height="720" fill="url(#sky)"/>
+  <circle cx="1020" cy="105" r="52" fill="#ffd65a" stroke="#fff2ae" stroke-width="12"/>
+  <g fill="#fff" opacity=".9">
+    <ellipse cx="190" cy="105" rx="78" ry="25"/><ellipse cx="145" cy="105" rx="38" ry="34"/><ellipse cx="220" cy="91" rx="48" ry="40"/>
+    <ellipse cx="700" cy="145" rx="70" ry="23"/><ellipse cx="660" cy="140" rx="38" ry="31"/><ellipse cx="735" cy="132" rx="44" ry="35"/>
+  </g>
+  <path d="M0 300 Q180 180 350 286 Q540 150 760 286 Q950 180 1200 300 V430 H0Z" fill="#6fad62"/>
+  <path d="M0 345 Q210 245 420 350 Q690 220 920 340 Q1060 280 1200 335 V450 H0Z" fill="#78b962"/>
+  <rect y="365" width="1200" height="355" fill="url(#grass)"/>
+  <g stroke="#f4e5b5" stroke-width="13" stroke-linecap="round">
+    <path d="M35 395H1165"/><path d="M35 438H1165"/>
+    <path d="M70 368V462M180 368V462M290 368V462M400 368V462M800 368V462M910 368V462M1020 368V462M1130 368V462"/>
+  </g>
+  <g transform="translate(70 245)">
+    <rect x="0" y="45" width="165" height="130" rx="5" fill="#d94f43" stroke="#96372f" stroke-width="5"/>
+    <path d="M-18 55 82-10 182 55Z" fill="#774338" stroke="#5d342c" stroke-width="5"/>
+    <rect x="58" y="90" width="52" height="85" fill="#6d3c2f"/><path d="M58 90 110 175M110 90 58 175" stroke="#f3d09d" stroke-width="5"/>
+    <rect x="16" y="78" width="30" height="30" fill="#bde9f4" stroke="#fff4d5" stroke-width="5"/>
+  </g>
+  <g transform="translate(1080 300)"><rect x="-10" y="72" width="20" height="95" fill="#7c5430"/><circle cx="0" cy="40" r="65" fill="#4b9951"/><circle cx="-42" cy="58" r="42" fill="#5caf5c"/><circle cx="42" cy="62" r="43" fill="#61b460"/></g>
+  <g fill="#f7d65c"><circle cx="250" cy="590" r="5"/><circle cx="1045" cy="570" r="5"/><circle cx="1120" cy="630" r="5"/><circle cx="90" cy="650" r="5"/></g>
+</svg>
