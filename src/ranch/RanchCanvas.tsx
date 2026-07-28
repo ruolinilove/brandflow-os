@@ -15,6 +15,7 @@ type RanchCanvasProps = {
 
 type RenderedAnimal = { id: string; x: number; y: number; radius: number }
 type ActionEffect = { id: string; kind: 'feed' | 'collect'; startedAt: number }
+type ViewTransform = { scaleX: number; scaleY: number; offsetX: number; offsetY: number }
 
 function roundRect(context: CanvasRenderingContext2D, x: number, y: number, width: number, height: number, radius: number) {
   context.beginPath()
@@ -27,6 +28,7 @@ export function RanchCanvas({ animals, manifest, images, selectedId, actionPulse
   const selectedRef = useRef(selectedId)
   const renderedRef = useRef<RenderedAnimal[]>([])
   const effectsRef = useRef<ActionEffect[]>([])
+  const viewRef = useRef<ViewTransform>({ scaleX: 1, scaleY: 1, offsetX: 0, offsetY: 0 })
 
   useEffect(() => { animalsRef.current = animals }, [animals])
   useEffect(() => { selectedRef.current = selectedId }, [selectedId])
@@ -51,8 +53,14 @@ export function RanchCanvas({ animals, manifest, images, selectedId, actionPulse
 
     const draw = (now: number) => {
       const compact = canvas.getBoundingClientRect().width < 640
-      context.setTransform(canvas.width / WIDTH, 0, 0, canvas.height / HEIGHT, 0, 0)
-      context.clearRect(0, 0, WIDTH, HEIGHT)
+      const scaleX = compact ? Math.max(canvas.width / WIDTH, canvas.height / HEIGHT) : canvas.width / WIDTH
+      const scaleY = compact ? scaleX : canvas.height / HEIGHT
+      const offsetX = compact ? (canvas.width - WIDTH * scaleX) / 2 : 0
+      const offsetY = compact ? (canvas.height - HEIGHT * scaleY) / 2 : 0
+      viewRef.current = { scaleX, scaleY, offsetX, offsetY }
+      context.setTransform(1, 0, 0, 1, 0, 0)
+      context.clearRect(0, 0, canvas.width, canvas.height)
+      context.setTransform(scaleX, 0, 0, scaleY, offsetX, offsetY)
       context.drawImage(images[manifest.background], 0, 0, WIDTH, HEIGHT)
 
       effectsRef.current = effectsRef.current.filter(effect => now - effect.startedAt < 1300)
@@ -62,13 +70,15 @@ export function RanchCanvas({ animals, manifest, images, selectedId, actionPulse
         const image = asset && images[asset.image]
         if (!asset || !image) return
         const phase = index * 1.73
-        const rangeX = asset.zone === 'pond' ? 80 : asset.zone === 'barn' ? 42 : 72
+        const rangeX = asset.zone === 'pond' ? 55 : asset.zone === 'barn' ? 34 : 58
         const rangeY = asset.zone === 'pond' ? 10 : 6
         let x = animal.x * WIDTH + Math.sin(now / (2400 / Math.max(.4, asset.speed / 18)) + phase) * rangeX
         let y = animal.y * HEIGHT + Math.sin(now / 1100 + phase) * rangeY
         if (compact) {
-          x = 245 + Math.min(1, Math.max(0, (x - 30) / 1120)) * 890
-          y = 355 + Math.min(1, Math.max(0, (y - 280) / 360)) * 280
+          x = Math.max(285, Math.min(915, x))
+          y = Math.min(y, asset.zone === 'pond' ? 470 : 440)
+        } else {
+          y = Math.min(y, asset.zone === 'pond' ? 555 : 515)
         }
         const direction = Math.cos(now / (2400 / Math.max(.4, asset.speed / 18)) + phase) >= 0 ? 1 : -1
         const selected = selectedRef.current === animal.id
@@ -109,21 +119,18 @@ export function RanchCanvas({ animals, manifest, images, selectedId, actionPulse
           context.drawImage(product, x + asset.size * .32 - 19, iconY - 19, 38, 38)
         }
 
-        const labelWidth = Math.max(112, asset.speciesName.length * 16 + 30)
-        const labelY = y - drawHeight * .58 - 43
-        roundRect(context, x - labelWidth / 2, labelY, labelWidth, 37, 12)
-        context.fillStyle = selected ? 'rgba(255,248,196,.97)' : 'rgba(70,73,42,.83)'
+        const labelWidth = Math.max(62, (animal.nickname || asset.name).length * 16 + 24)
+        const labelY = y + drawHeight * .38
+        roundRect(context, x - labelWidth / 2, labelY, labelWidth, 26, 10)
+        context.fillStyle = selected ? 'rgba(255,239,132,.98)' : 'rgba(255,250,218,.9)'
         context.fill()
-        context.strokeStyle = selected ? '#c48835' : 'rgba(255,255,255,.65)'
+        context.strokeStyle = selected ? '#a96b23' : 'rgba(112,74,36,.55)'
         context.lineWidth = 2
         context.stroke()
         context.textAlign = 'center'
-        context.fillStyle = selected ? '#6a4826' : '#fff'
-        context.font = '800 14px "Microsoft YaHei", sans-serif'
-        context.fillText(animal.nickname || asset.name, x, labelY + 16)
-        context.fillStyle = selected ? '#8c6c43' : '#e8f4cd'
-        context.font = '10px "Microsoft YaHei", sans-serif'
-        context.fillText(asset.speciesName, x, labelY + 30)
+        context.fillStyle = '#65401f'
+        context.font = '800 13px "Microsoft YaHei", sans-serif'
+        context.fillText(animal.nickname || asset.name, x, labelY + 18)
 
         const effect = effectsRef.current.find(item => item.id === animal.id)
         if (effect) {
@@ -151,20 +158,26 @@ export function RanchCanvas({ animals, manifest, images, selectedId, actionPulse
     ref={canvasRef}
     width={WIDTH}
     height={HEIGHT}
-    className="block h-[390px] w-full touch-manipulation select-none sm:h-auto sm:aspect-[5/3]"
+    className="block h-[340px] w-full touch-manipulation select-none sm:h-auto sm:aspect-[16/9]"
     role="application"
     aria-label="可互动牧场，点击动物可查看、喂养和收取产物"
     tabIndex={0}
     onPointerMove={event => {
       const rect = event.currentTarget.getBoundingClientRect()
-      const x = (event.clientX - rect.left) / rect.width * WIDTH
-      const y = (event.clientY - rect.top) / rect.height * HEIGHT
+      const pixelsX = (event.clientX - rect.left) * canvasRef.current!.width / rect.width
+      const pixelsY = (event.clientY - rect.top) * canvasRef.current!.height / rect.height
+      const { scaleX, scaleY, offsetX, offsetY } = viewRef.current
+      const x = (pixelsX - offsetX) / scaleX
+      const y = (pixelsY - offsetY) / scaleY
       event.currentTarget.style.cursor = renderedRef.current.some(item => Math.hypot(item.x - x, item.y - y) <= item.radius) ? 'pointer' : 'default'
     }}
     onPointerDown={event => {
       const rect = event.currentTarget.getBoundingClientRect()
-      const x = (event.clientX - rect.left) / rect.width * WIDTH
-      const y = (event.clientY - rect.top) / rect.height * HEIGHT
+      const pixelsX = (event.clientX - rect.left) * canvasRef.current!.width / rect.width
+      const pixelsY = (event.clientY - rect.top) * canvasRef.current!.height / rect.height
+      const { scaleX, scaleY, offsetX, offsetY } = viewRef.current
+      const x = (pixelsX - offsetX) / scaleX
+      const y = (pixelsY - offsetY) / scaleY
       const selected = [...renderedRef.current].reverse().find(item => Math.hypot(item.x - x, item.y - y) <= item.radius)
       if (selected) onSelect(selected.id)
     }}

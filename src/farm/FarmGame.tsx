@@ -1,6 +1,6 @@
 import { AnimatePresence, motion } from 'framer-motion'
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { Coins, Droplets, MousePointer2, PackageOpen, ShoppingBasket, Sparkles, Sprout, Store, Users, Warehouse, X } from 'lucide-react'
+import { Backpack, Bug, Coins, Droplets, Move, PackageOpen, ShoppingBasket, Shovel, Sparkles, Sprout, Store, Trophy, Users, Warehouse, Wrench, X } from 'lucide-react'
 import { isSupabaseConfigured } from '../lib/supabase'
 import { loadFarmGame, saveFarmGame } from '../lib/brandflow-db'
 import { useFarmAssets } from './farm-assets'
@@ -225,6 +225,32 @@ export function FarmGame({ profile }: FarmGameProps) {
     setNotice(`售出 ${count} 朵${plant.name}，获得 ${count * plant.sellPrice} 金币`)
   }
 
+  const harvestAllReady = () => {
+    if (!assets.manifest) return
+    const readyPlots = plots.filter(plot => plot.plantKey && plot.growthState === 'ready')
+    if (!readyPlots.length) { setNotice('当前没有成熟作物可以收获'); return }
+    const additions: Record<string, number> = {}
+    let totalCoins = 0
+    let totalExperience = 0
+    let animationDuration = 0
+    readyPlots.forEach(plot => {
+      const plant = assets.manifest!.plants[plot.plantKey!]
+      additions[plot.plantKey!] = (additions[plot.plantKey!] || 0) + 1
+      totalCoins += plant.harvestCoins
+      totalExperience += plant.harvestExperience
+      animationDuration = Math.max(animationDuration, plant.states.harvest.durationMs)
+    })
+    const positions = new Set(readyPlots.map(plot => plot.position))
+    setPlots(current => current.map(plot => positions.has(plot.position) ? { ...plot, growthState: 'harvest' } : plot))
+    setNotice(`一键收获 ${readyPlots.length} 块土地，+${totalCoins} 金币，+${totalExperience} 经验`)
+    const timer = window.setTimeout(() => {
+      setPlots(current => current.map(plot => positions.has(plot.position) ? { position: plot.position, plantKey: null, growthState: null, plantedAt: null } : plot))
+      setPlayer(current => ({ ...current, inventory: Object.entries(additions).reduce((result, [key, count]) => ({ ...result, [key]: (result[key] || 0) + count }), current.inventory) }))
+      addExperience(totalCoins, totalExperience)
+    }, animationDuration)
+    harvestTimers.current.push(timer)
+  }
+
   const experienceTotal = expRequired(player.level)
   const growingCount = plots.filter(plot => plot.plantKey && plot.growthState !== 'ready' && plot.growthState !== 'harvest').length
   const readyCount = plots.filter(plot => plot.growthState === 'ready').length
@@ -252,16 +278,28 @@ export function FarmGame({ profile }: FarmGameProps) {
         </div>
       </div>
 
+      <div className="absolute left-1/2 top-3 hidden -translate-x-1/2 items-start gap-1.5 lg:flex">
+        <FarmTopEntry label="成就" icon={<Trophy size={21}/>} onClick={() => setNotice(`农场成就：已解锁 ${plots.filter(plot => plot.plantKey).length}/18 块种植记录`)}/>
+        <FarmTopEntry label="装扮" icon={<Sparkles size={21}/>} onClick={() => setNotice('农场装扮功能正在准备更多主题')}/>
+        <FarmTopEntry label="商店" icon={<Store size={21}/>} active={panel === 'shop'} onClick={() => setPanel(panel === 'shop' ? null : 'shop')}/>
+        <FarmTopEntry label="仓库" icon={<Warehouse size={21}/>} badge={player.inventory.sunflower || 0} active={panel === 'warehouse'} onClick={() => setPanel(panel === 'warehouse' ? null : 'warehouse')}/>
+        <FarmTopEntry label="加工" icon={<Wrench size={21}/>} onClick={() => setNotice('加工坊可把收成制作成更高价值商品')}/>
+        <FarmTopEntry label="任务" icon={<Sprout size={21}/>} onClick={() => setNotice(`今日任务：播种 ${plots.filter(plot => plot.plantKey).length}/18，成熟 ${readyCount} 块`)}/>
+        <FarmTopEntry label="好友" icon={<Users size={21}/>} active={panel === 'friends'} onClick={() => setPanel(panel === 'friends' ? null : 'friends')}/>
+      </div>
+
       <div className="absolute left-2.5 top-[92px] w-[190px] sm:bottom-[78px] sm:left-1/2 sm:top-auto sm:w-[calc(100%-24px)] sm:max-w-xl sm:-translate-x-1/2">
         <AnimatePresence mode="wait"><motion.div key={notice} initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }} className="mx-auto w-fit max-w-full rounded-2xl border-2 border-white/80 bg-[#24482e]/88 px-4 py-2 text-center text-[11px] font-semibold leading-5 text-white shadow-lg backdrop-blur sm:text-xs">{notice}</motion.div></AnimatePresence>
       </div>
 
-      <div className="absolute bottom-2.5 left-1/2 flex -translate-x-1/2 items-center gap-1.5 rounded-2xl border-[3px] border-[#f7e5b8] bg-[#704923]/92 p-1.5 shadow-[0_7px_0_rgba(62,40,20,.32)] backdrop-blur sm:bottom-4 sm:gap-2 sm:p-2">
-        <FarmModeButton label="智能操作" active={tool === 'auto'} icon={<MousePointer2 size={18}/>} onClick={() => { setTool('auto'); setNotice('智能模式：空地播种，成熟作物直接采收') }}/>
-        <FarmModeButton label="浇水加速" active={tool === 'water'} icon={<Droplets size={18}/>} onClick={() => { setTool('water'); setNotice('浇水模式：点击成长中的作物加速 4 秒') }}/>
-        <FarmModeButton label="批量采收" active={tool === 'harvest'} icon={<PackageOpen size={18}/>} onClick={() => { setTool('harvest'); setNotice('采收模式：点击成熟作物进行采收') }}/>
-        <span className="mx-0.5 h-8 w-px bg-[#d4ae72]/70"/>
-        <button onClick={() => setPanel('shop')} className="flex h-10 items-center gap-1.5 rounded-xl bg-[#f2c34e] px-3 text-[10px] font-black text-[#634118] shadow-[0_3px_0_#b57928] sm:text-xs"><Sprout size={16}/>种子 × {player.seeds.sunflower || 0}</button>
+      <div className="absolute bottom-2.5 left-1/2 flex max-w-[calc(100%-18px)] -translate-x-1/2 items-end gap-1 overflow-x-auto rounded-2xl border-[3px] border-[#f7e5b8] bg-[#704923]/94 p-1.5 shadow-[0_7px_0_rgba(62,40,20,.4)] backdrop-blur sm:bottom-3 sm:gap-1.5 sm:p-2">
+        <FarmModeButton label="移动" active={tool === 'auto'} icon={<Move size={18}/>} onClick={() => { setTool('auto'); setNotice('智能模式：空地播种，成熟作物直接采收') }}/>
+        <FarmModeButton label="种子包" active={panel === 'shop'} icon={<Backpack size={18}/>} badge={player.seeds.sunflower || 0} onClick={() => setPanel(panel === 'shop' ? null : 'shop')}/>
+        <FarmModeButton label="除虫" active={false} icon={<Bug size={18}/>} onClick={() => setNotice('已经巡视全部土地，没有发现害虫')}/>
+        <FarmModeButton label="浇水" active={tool === 'water'} icon={<Droplets size={18}/>} onClick={() => { setTool('water'); setNotice('浇水模式：点击成长中的作物加速 4 秒') }}/>
+        <FarmModeButton label="铲除" active={false} icon={<Shovel size={18}/>} onClick={() => setNotice('铲除工具已收好，避免误删正在成长的作物')}/>
+        <FarmModeButton label="收获" active={tool === 'harvest'} icon={<PackageOpen size={18}/>} onClick={() => { setTool('harvest'); setNotice('采收模式：点击成熟作物进行采收') }}/>
+        <FarmModeButton label="全收" active={false} icon={<Warehouse size={18}/>} badge={readyCount} onClick={harvestAllReady}/>
       </div>
 
       <div className="absolute left-4 top-[118px] hidden w-40 rounded-2xl border-2 border-white/80 bg-[#fff7dc]/92 p-3 text-[#6c4b2a] shadow-lg backdrop-blur xl:block">
@@ -269,9 +307,8 @@ export function FarmGame({ profile }: FarmGameProps) {
         <div className="mt-3 space-y-2 text-[10px]"><p className="flex justify-between"><span>播种土地</span><b>{plots.filter(item => item.plantKey).length}/18</b></p><p className="flex justify-between"><span>成熟作物</span><b>{readyCount}</b></p><p className="flex justify-between"><span>仓库收成</span><b>{player.inventory.sunflower || 0}</b></p></div>
       </div>
 
-      <div className="absolute right-2.5 top-[92px] flex flex-row gap-2 sm:right-4 sm:top-[106px] sm:flex-col">
-        <FarmTool icon={<Store size={20}/>} label="商店" active={panel === 'shop'} onClick={() => setPanel(panel === 'shop' ? null : 'shop')}/>
-        <FarmTool icon={<Warehouse size={20}/>} label="仓库" active={panel === 'warehouse'} onClick={() => setPanel(panel === 'warehouse' ? null : 'warehouse')}/>
+      <div className="absolute right-2.5 top-[92px] flex flex-col gap-2 sm:right-4 sm:top-[106px]">
+        <FarmTool icon={<Sparkles size={20}/>} label="活动" active={false} onClick={() => setNotice('限时丰收活动：完成播种与采收可累计经验')}/>
         <FarmTool icon={<Users size={20}/>} label="好友" active={panel === 'friends'} onClick={() => setPanel(panel === 'friends' ? null : 'friends')}/>
       </div>
 
@@ -290,17 +327,21 @@ export function FarmGame({ profile }: FarmGameProps) {
   </div>
 }
 
-function FarmModeButton({ label, icon, active, onClick }: { label: string; icon: React.ReactNode; active: boolean; onClick: () => void }) {
-  return <motion.button whileTap={{ scale: .93 }} title={label} aria-label={label} onClick={onClick} className={`grid size-10 place-items-center rounded-xl border-2 transition ${active ? 'border-[#fff4b5] bg-[#8fd35d] text-white shadow-[0_3px_0_#4e8c36]' : 'border-[#a97642] bg-[#fff5d5] text-[#714a27]'}`}>{icon}</motion.button>
+function FarmModeButton({ label, icon, active, badge = 0, onClick }: { label: string; icon: React.ReactNode; active: boolean; badge?: number; onClick: () => void }) {
+  return <motion.button whileHover={{ y: -4 }} whileTap={{ scale: .93 }} title={label} aria-label={label} onClick={onClick} className={`relative flex h-11 min-w-10 flex-col items-center justify-center rounded-xl border-2 px-1 text-[8px] font-black transition sm:h-14 sm:min-w-14 sm:px-1.5 sm:text-[9px] ${active ? 'border-[#fff4b5] bg-[#8fd35d] text-white shadow-[0_3px_0_#4e8c36]' : 'border-[#a97642] bg-[#fff5d5] text-[#714a27]'}`}>{icon}<span className="mt-0.5 whitespace-nowrap">{label}</span>{badge > 0 && <span className="absolute -right-1 -top-1 grid min-w-4 place-items-center rounded-full bg-rose-500 px-1 text-[8px] leading-4 text-white ring-2 ring-[#fff5d5]">{badge}</span>}</motion.button>
+}
+
+function FarmTopEntry({ label, icon, active = false, badge = 0, onClick }: { label: string; icon: React.ReactNode; active?: boolean; badge?: number; onClick: () => void }) {
+  return <motion.button whileHover={{ y: 3 }} whileTap={{ scale: .93 }} title={label} aria-label={label} onClick={onClick} className={`relative flex w-12 flex-col items-center gap-0.5 text-[9px] font-black drop-shadow-md ${active ? 'text-[#fff099]' : 'text-white'}`}><span className={`grid size-10 place-items-center rounded-xl border-[3px] shadow-[0_4px_0_rgba(62,34,19,.5)] ${active ? 'border-[#fff2a3] bg-[#75b94e]' : 'border-[#ffe5a8] bg-[#765035] text-[#fff1be]'}`}>{icon}</span><span className="rounded-md bg-[#4b2e1f]/82 px-1.5 py-0.5">{label}</span>{badge > 0 && <span className="absolute right-0 top-0 grid min-w-4 place-items-center rounded-full bg-rose-500 px-1 text-[8px] leading-4 text-white ring-2 ring-white">{badge}</span>}</motion.button>
 }
 
 function FarmTool({ icon, label, active, onClick }: { icon: React.ReactNode; label: string; active: boolean; onClick: () => void }) {
-  return <motion.button whileHover={{ x: -3 }} whileTap={{ scale: .94 }} title={label} aria-label={label} onClick={onClick} className={`grid size-11 place-items-center rounded-2xl border-2 shadow-[0_5px_0_rgba(90,62,29,.28)] transition sm:size-12 ${active ? 'border-[#ffe27b] bg-[#ffd453] text-[#6f451e]' : 'border-white/85 bg-[#fff9df]/95 text-[#6f4b29]'}`}>{icon}</motion.button>
+  return <motion.button whileHover={{ x: -3 }} whileTap={{ scale: .94 }} title={label} aria-label={label} onClick={onClick} className={`flex w-11 flex-col items-center gap-0.5 text-[8px] font-black drop-shadow-md ${active ? 'text-[#fff099]' : 'text-white'}`}><span className={`grid size-10 place-items-center rounded-xl border-[3px] shadow-[0_4px_0_rgba(58,33,20,.45)] ${active ? 'border-[#fff2a3] bg-[#e4a03b]' : 'border-[#ffe7a8] bg-[#724831]/94 text-[#ffecaa]'}`}>{icon}</span><span className="rounded-md bg-[#4b2e1f]/82 px-1.5 py-0.5">{label}</span></motion.button>
 }
 
 function FarmPanel({ panel, onClose, children }: { panel: Exclude<Panel, null>; onClose: () => void; children: React.ReactNode }) {
   const titles = { shop: '种子商店', warehouse: '我的仓库', friends: '农场好友' }
-  return <motion.aside initial={{ opacity: 0, x: 24 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: 24 }} transition={{ type: 'spring', stiffness: 280, damping: 26 }} className="absolute bottom-16 right-2.5 top-[92px] z-10 w-[min(330px,calc(100%-20px))] overflow-auto rounded-3xl border-[3px] border-white/90 bg-[#fffaf0]/97 p-4 shadow-2xl backdrop-blur sm:bottom-5 sm:right-20 sm:top-[106px] sm:p-5">
+  return <motion.aside initial={{ opacity: 0, x: 24 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: 24 }} transition={{ type: 'spring', stiffness: 280, damping: 26 }} className="absolute bottom-[80px] right-2.5 top-[92px] z-20 w-[min(330px,calc(100%-20px))] overflow-auto rounded-3xl border-[3px] border-white/90 bg-[#fffaf0]/97 p-4 shadow-2xl backdrop-blur sm:bottom-[88px] sm:right-4 sm:top-[106px] sm:p-5 lg:right-20">
     <div className="flex items-center justify-between"><h2 className="font-black text-[#563a22]">{titles[panel]}</h2><button onClick={onClose} aria-label="关闭" className="grid size-8 place-items-center rounded-xl bg-[#efe6d3] text-[#76583b]"><X size={16}/></button></div>
     <div className="mt-4">{children}</div>
   </motion.aside>
