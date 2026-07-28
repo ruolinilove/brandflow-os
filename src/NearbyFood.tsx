@@ -122,6 +122,7 @@ export function NearbyFood() {
   const [selectedId,setSelectedId] = useState(previewRestaurants[0].id)
   const [loading,setLoading] = useState(false)
   const [status,setStatus] = useState('')
+  const [mapReady,setMapReady] = useState(false)
   const connected = Boolean(config.key && config.securityCode)
 
   const searchNearby = async (keyword = query, point = center, distance = radius) => {
@@ -156,6 +157,8 @@ export function NearbyFood() {
   useEffect(() => {
     if (!connected || !mapElement.current) return
     let active = true
+    let resizeMap: (() => void) | null = null
+    setMapReady(false)
     setLoading(true)
     loadAMap(config).then((AMap) => {
       if (!active || !mapElement.current) return
@@ -164,10 +167,19 @@ export function NearbyFood() {
       mapInstance.current = new AMap.Map(mapElement.current, {
         center,
         zoom: 14,
-        mapStyle: 'amap://styles/whitesmoke',
+        resizeEnable: true,
         viewMode: '2D',
       })
-      mapInstance.current.addControl(new AMap.ToolBar({ position:{ top:'16px', right:'16px' } }))
+      const map = mapInstance.current
+      map.addControl(new AMap.ToolBar({ position:{ top:'16px', right:'16px' } }))
+      map.on('complete', () => {
+        if (!active) return
+        setMapReady(true)
+        map.resize()
+      })
+      requestAnimationFrame(() => map.resize())
+      resizeMap = () => map.resize()
+      window.addEventListener('resize', resizeMap)
       searchNearby('美食', center, radius)
     }).catch((error) => {
       if (active) {
@@ -177,8 +189,10 @@ export function NearbyFood() {
     })
     return () => {
       active = false
+      if (resizeMap) window.removeEventListener('resize', resizeMap)
       mapInstance.current?.destroy?.()
       mapInstance.current = null
+      setMapReady(false)
     }
   }, [connected, config.key, config.securityCode])
 
@@ -292,6 +306,7 @@ export function NearbyFood() {
     <div className="grid gap-4 xl:grid-cols-[minmax(0,1.35fr)_minmax(360px,.65fr)]">
       <section className={`${cardClass} relative min-h-[560px] overflow-hidden`}>
         <div ref={mapElement} className={`absolute inset-0 ${connected?'':'hidden'}`}/>
+        {connected&&!mapReady&&<div className="absolute inset-0 z-10 grid place-items-center bg-[#f5f8f4]/90 p-6 text-center backdrop-blur-sm"><div className="max-w-xs"><span className="mx-auto grid size-12 place-items-center rounded-2xl bg-white text-[#72b653] shadow-sm"><MapPin size={22}/></span><p className="mt-4 text-sm font-semibold text-slate-700">{status||'正在加载地图...'}</p><p className="mt-2 text-xs leading-5 text-slate-400">如果持续空白，请检查高德 Key 类型、安全密钥和当前域名白名单。</p></div></div>}
         {!connected&&<div className="absolute inset-0 bg-[#e7eee8]">
           <div className="absolute inset-0 opacity-40" style={{backgroundImage:'linear-gradient(#cdd9cf 1px, transparent 1px), linear-gradient(90deg, #cdd9cf 1px, transparent 1px)',backgroundSize:'56px 56px'}}/>
           {previewRestaurants.map((item,index)=><button key={item.id} onClick={()=>selectRestaurant(item)} aria-label={`查看 ${item.name}`} className={`absolute grid size-10 place-items-center rounded-full border-4 border-white text-xs font-bold shadow-lg transition ${selectedId===item.id?'scale-110 bg-[#73b954] text-white':'bg-white text-[#5e9950]'}`} style={{left:`${24+(index%2)*42}%`,top:`${25+Math.floor(index/2)*38}%`}}>{index+1}</button>)}
