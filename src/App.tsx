@@ -6,7 +6,7 @@ import {
   Activity, ArrowLeftRight, ArrowUpRight, Bell, CalendarDays, CheckCircle2, Copy,
   ChevronDown, CircleDashed, Crown, Database, Download, FileChartColumn, FileText,
   Droplets, Flower2, FolderKanban, HardDrive, House, Images, LayoutDashboard,
-  KeyRound, Lightbulb, LogOut, Menu, MoreHorizontal, Play, Plus, Search, Settings, Share2,
+  KeyRound, Lightbulb, LogOut, MapPinned, Menu, MoreHorizontal, Play, Plus, Search, Settings, Share2,
   ShieldCheck, Sparkles, Sprout, Sun, Trash2, TrendingUp, Trophy, Upload, UserCog, Users,
   WandSparkles, X,
 } from 'lucide-react'
@@ -15,6 +15,7 @@ import {
   ResponsiveContainer, Tooltip, XAxis, YAxis,
 } from 'recharts'
 import { isSupabaseConfigured, supabase } from './lib/supabase'
+import { NearbyFood } from './NearbyFood'
 import {
   assetsDb, bootstrapBrandFlow, contentsDb, createBrandFlowInvite, deleteMetric,
   getBrandFlowAccessRole, ideasDb, isBrandFlowAuthorized, listBrandFlowInvites, listBrandFlowUsers,
@@ -24,7 +25,7 @@ import {
 } from './lib/brandflow-db'
 
 type BrandId = 'brandA' | 'brandB'
-type PageId = 'dashboard' | 'plan' | 'projects' | 'content' | 'data' | 'assets' | 'ideas' | 'garden' | 'ai' | 'admin' | 'settings'
+type PageId = 'dashboard' | 'plan' | 'projects' | 'content' | 'data' | 'assets' | 'ideas' | 'garden' | 'food' | 'ai' | 'admin' | 'settings'
 type BrandConfig = Record<BrandId, string>
 type MetricEntry = { id: string; date: string; brand: BrandId; views: number; shares: number; followers: number }
 type UserProfile = { displayName: string; jobTitle: string; avatarUrl: string | null }
@@ -42,7 +43,7 @@ const defaultEntries: MetricEntry[] = [
 const navItems = [
   ['dashboard','首页',House],['plan','工作计划',CalendarDays],['projects','项目中心',FolderKanban],
   ['content','内容中心',FileText],['data','数据中心',Database],['assets','素材中心',Images],
-  ['ideas','灵感中心',Lightbulb],['garden','我的花园',Flower2],['ai','AI中心',Sparkles],
+  ['ideas','灵感中心',Lightbulb],['garden','我的花园',Flower2],['food','附近美食',MapPinned],['ai','AI中心',Sparkles],
   ['admin','管理员设置',UserCog],['settings','设置',Settings],
 ] as const
 
@@ -195,7 +196,7 @@ function App(){
         {dataLoading&&<div className="mb-4 h-1 overflow-hidden rounded-full bg-emerald-100"><motion.div className="h-full w-1/3 rounded-full bg-[#8dcc65]" animate={{x:['-100%','300%']}} transition={{duration:1.2,repeat:Infinity,ease:'easeInOut'}}/></div>}
         <AnimatePresence mode="wait">
           <motion.div key={page} variants={pageMotion} initial="hidden" animate="show" exit={{opacity:0,y:-8,transition:{duration:.18}}}>
-            {page==='dashboard'&&<Dashboard {...pageProps}/>} {page==='plan'&&<WorkPlan/>} {page==='projects'&&<ProjectCenter/>} {page==='content'&&<ContentCenter/>} {page==='data'&&<DataCenter {...pageProps}/>} {page==='assets'&&<Assets/>} {page==='ideas'&&<IdeasCenter/>} {page==='garden'&&<Garden/>} {page==='ai'&&<AiPage/>} {page==='admin'&&<AdminSettingsPage accessRole={accessRole}/>} {page==='settings'&&<SettingsPage profile={profile} onSaveProfile={savePersonalProfile} accessRole={accessRole}/>}
+            {page==='dashboard'&&<Dashboard {...pageProps}/>} {page==='plan'&&<WorkPlan/>} {page==='projects'&&<ProjectCenter/>} {page==='content'&&<ContentCenter/>} {page==='data'&&<DataCenter {...pageProps}/>} {page==='assets'&&<Assets/>} {page==='ideas'&&<IdeasCenter/>} {page==='garden'&&<Garden/>} {page==='food'&&<NearbyFood/>} {page==='ai'&&<AiPage/>} {page==='admin'&&<AdminSettingsPage accessRole={accessRole}/>} {page==='settings'&&<SettingsPage profile={profile} onSaveProfile={savePersonalProfile} accessRole={accessRole}/>}
           </motion.div>
         </AnimatePresence>
       </main>
@@ -317,7 +318,7 @@ function WorkPlan(){
   const switcher=<div className="flex rounded-2xl border border-white bg-white p-1 shadow-sm">{([['month','月度计划'],['week','周计划']] as const).map(([id,label])=><motion.button key={id} whileTap={{scale:.97}} onClick={()=>setPlanView(id)} className={`h-9 rounded-xl px-4 text-sm font-semibold transition ${planView===id?'bg-[#dff2d6] text-[#39713c] shadow-sm':'text-slate-400 hover:text-slate-700'}`}>{label}</motion.button>)}</div>
   const addPlan=async(event:React.FormEvent)=>{event.preventDefault();const item={...planForm};if(isSupabaseConfigured){const row:any=await plansDb.create({brandCode:planForm.brand==='喜客喜装饰'?'brandB':'brandA',title:planForm.title,summary:planForm.summary,period:planForm.period,due_date:planForm.date});item.title=row.title}setCustomPlans([{...item},...customPlans]);setCreateOpen(false);setPlanForm({title:'',summary:'',brand:'创艺装饰',period:'month',date:''})}
   return <><PageHead eyebrow="Work Plan" title="工作计划" desc="月度计划确定阶段目标，周计划负责具体任务执行。" action={<div className="flex flex-wrap items-center gap-3">{switcher}<motion.button onClick={()=>setCreateOpen(true)} whileHover={{y:-2}} whileTap={{scale:.97}} className="flex h-11 items-center gap-2 rounded-2xl bg-[#8dcc65] px-5 text-sm font-semibold text-white shadow-lg shadow-lime-200"><Plus size={17}/>新建计划</motion.button></div>}/>
-    {customPlans.length>0&&<motion.div initial={{opacity:0,y:-8}} animate={{opacity:1,y:0}} className="mb-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-3">{customPlans.map((plan,index)=><Card key={`${plan.title}-${index}`} onClick={()=>setSelectedPlan({title:plan.title,category:plan.period==='month'?'月度计划':'周计划',description:plan.summary,fields:[['所属品牌',plan.brand||'未指定'],['完成日期',plan.date||'待定']]})} ariaLabel={`查看计划 ${plan.title}`} className="flex items-start gap-4 p-4"><span className="grid size-11 shrink-0 place-items-center rounded-2xl bg-[#e5f3dd] text-[#5e9950]"><CalendarDays size={19}/></span><div className="min-w-0"><b className="block truncate text-sm">{plan.title}</b>{plan.summary&&<p className="mt-1 line-clamp-2 text-xs leading-5 text-slate-500">{plan.summary}</p>}<span className="mt-2 block text-[11px] text-slate-400">{plan.brand&&`${plan.brand} · `}{plan.period==='month'?'月度计划':'周计划'} · {plan.date||'待定时间'}</span></div></Card>)}</motion.div>}
+    {customPlans.length>0&&<motion.div variants={gridMotion} initial="hidden" animate="show" className="mb-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-3">{customPlans.map((plan,index)=><Card key={`${plan.title}-${index}`} onClick={()=>setSelectedPlan({title:plan.title,category:plan.period==='month'?'月度计划':'周计划',description:plan.summary,fields:[['所属品牌',plan.brand||'未指定'],['完成日期',plan.date||'待定']]})} ariaLabel={`查看计划 ${plan.title}`} className="flex items-start gap-4 p-4"><span className="grid size-11 shrink-0 place-items-center rounded-2xl bg-[#e5f3dd] text-[#5e9950]"><CalendarDays size={19}/></span><div className="min-w-0"><b className="block truncate text-sm">{plan.title}</b>{plan.summary&&<p className="mt-1 line-clamp-2 text-xs leading-5 text-slate-500">{plan.summary}</p>}<span className="mt-2 block text-[11px] text-slate-400">{plan.brand&&`${plan.brand} · `}{plan.period==='month'?'月度计划':'周计划'} · {plan.date||'待定时间'}</span></div></Card>)}</motion.div>}
     <AnimatePresence mode="wait">
       {planView==='month'?<motion.div key="month" variants={gridMotion} initial="hidden" animate="show" exit={{opacity:0,y:-8}}><div className="mb-4 grid gap-4 sm:grid-cols-3"><Card className="p-5"><p className="text-xs text-slate-400">本月目标</p><strong className="mt-2 block text-2xl">双品牌内容稳定更新</strong></Card><Card className="p-5"><p className="text-xs text-slate-400">计划完成度</p><strong className="mt-2 block text-3xl">56%</strong><div className="mt-4 h-2 overflow-hidden rounded-full bg-[#edf2eb]"><motion.div initial={{width:0}} animate={{width:'56%'}} className="h-full rounded-full bg-[#8dcc65]"/></div></Card><Card className="p-5"><p className="text-xs text-slate-400">本月安排</p><div className="mt-3 flex gap-6"><div><b className="block text-2xl">16</b><span className="text-xs text-slate-400">项任务</span></div><div><b className="block text-2xl">8</b><span className="text-xs text-slate-400">条内容</span></div></div></Card></div><div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">{monthWeeks.map(([week,focus,tasks,progress],index)=><Card key={week} className="min-h-[330px] p-5"><div className="flex items-center justify-between"><span className="text-xs font-semibold text-[#67a756]">{week}</span><span className={`rounded-full px-2.5 py-1 text-[10px] ${progress===100?'bg-emerald-50 text-emerald-700':index===1?'bg-sky-50 text-sky-600':'bg-slate-50 text-slate-500'}`}>{progress===100?'已完成':index===1?'进行中':'待开始'}</span></div><h2 className="mt-5 text-lg font-semibold">{focus}</h2><div className="mt-5 space-y-3">{tasks.map(task=><div key={task} className="flex gap-3 rounded-2xl bg-[#f7f9f6] p-3 text-sm leading-6"><CircleDashed size={16} className="mt-1 shrink-0 text-[#80ba65]"/>{task}</div>)}</div><div className="mt-6 flex items-center gap-3"><div className="h-2 flex-1 overflow-hidden rounded-full bg-[#edf2eb]"><motion.div initial={{width:0}} animate={{width:`${progress}%`}} className="h-full rounded-full bg-[#8dcc65]"/></div><span className="text-xs font-semibold text-slate-400">{progress}%</span></div></Card>)}</div></motion.div>:<motion.div key="week" variants={gridMotion} initial="hidden" animate="show" exit={{opacity:0,y:-8}} className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">{weekGroups.map(([name,items],index)=><Card key={name} className="min-h-[430px] bg-white/75 p-4"><div className="flex items-center justify-between px-1 py-2"><h2 className="flex items-center gap-2 font-semibold"><i className={`size-2 rounded-full ${index===0?'bg-slate-300':index===1?'bg-sky-400':index===2?'bg-amber-400':'bg-[#8dcc65]'}`}/>{name}</h2><span className="rounded-full bg-[#f2f6ef] px-2 py-1 text-xs text-slate-500">{items.length}</span></div><div className="mt-3 space-y-3">{items.map((item,i)=><motion.article whileHover={{y:-3}} key={item} className="rounded-2xl border border-slate-100 bg-white p-4 shadow-sm"><span className="text-[10px] font-semibold text-[#67a756]">{i%2?'内容运营':'品牌项目'}</span><h3 className="mt-2 text-sm font-semibold leading-6">{item}</h3><div className="mt-5 flex items-center justify-between text-xs text-slate-400"><span className="grid size-7 place-items-center rounded-full bg-[#e5f3dd] font-bold text-[#5d8d52]">{i%2?'文':'设'}</span><time>本周{index+i+1}日</time></div></motion.article>)}</div></Card>)}</motion.div>}
     </AnimatePresence>

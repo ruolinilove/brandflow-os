@@ -12,6 +12,7 @@ BrandFlow OS 是面向装修品牌内容运营者的开源个人数据中心，�
 - 品牌项目、内容生产、素材文件和灵感管理
 - Supabase 邮箱认证、Row Level Security 和私有 Storage
 - 可交互个人花园，支持种植、浇水和采收
+- 高德地图附近美食搜索，支持评分、距离、品类筛选和导航
 - 响应式浅色 SaaS 界面与 Framer Motion 动效
 
 ## 技术栈
@@ -50,9 +51,13 @@ cp .env.example .env.local
 ```env
 VITE_SUPABASE_URL=https://your-project-ref.supabase.co
 VITE_SUPABASE_ANON_KEY=your-publishable-or-anon-key
+VITE_AMAP_JS_KEY=your-amap-web-js-api-key
+VITE_AMAP_SECURITY_CODE=your-amap-security-code
 ```
 
 `VITE_SUPABASE_ANON_KEY` 只能使用 Supabase 的 publishable 或 legacy anon key。不要把 secret/service-role key 放进前端环境变量。
+
+高德地图配置为可选项。未填写时“附近美食”会显示明确标注的界面预览数据，也可以直接在该页面填写 Web 端 JS API Key 和安全密钥并保存在当前浏览器。
 
 ### 初始化数据库
 
@@ -63,6 +68,7 @@ VITE_SUPABASE_ANON_KEY=your-publishable-or-anon-key
 3. `supabase/migrations/202607120003_invite_access.sql`
 4. `supabase/migrations/202607120004_first_owner_bootstrap.sql`
 5. `supabase/migrations/202607130001_super_admin_role.sql`
+6. `supabase/migrations/202607130002_admin_management.sql`
 
 这些迁移会创建业务表、模块初始化函数、私有素材桶和邀请制访问策略。
 
