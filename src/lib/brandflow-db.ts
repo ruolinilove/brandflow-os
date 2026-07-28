@@ -184,7 +184,7 @@ export async function saveMetric(input: {
       views: input.views,
       shares: input.shares,
       follower_growth: input.followerGrowth ?? 0,
-    }, { onConflict: 'owner_id,brand_id,metric_date,platform' })
+    }, { onConflict: 'owner_id,brand_id,metric_date,platform,content_name' })
     .select('id, brand_id, metric_date, platform, content_name, views, shares, follower_growth')
     .single()
   return assertData(data as MetricRow | null, error)

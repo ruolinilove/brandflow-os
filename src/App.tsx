@@ -157,7 +157,7 @@ function App(){
   const addMetricEntry=async(input:{date:string;brand:BrandId;contentName:string;views:number;shares:number})=>{
     if(!isSupabaseConfigured){setEntries(current=>[...current,{id:`metric-${Date.now()}`,...input,followers:0}]);return}
     const row=await saveMetric({brandCode:input.brand,date:input.date,contentName:input.contentName,views:input.views,shares:input.shares})
-    setEntries(current=>[...current.filter(entry=>entry.id!==String(row.id)&&!(entry.date===input.date&&entry.brand===input.brand)),{id:String(row.id),date:row.metric_date,brand:input.brand,contentName:row.content_name,views:Number(row.views),shares:Number(row.shares),followers:Number(row.follower_growth)}])
+    setEntries(current=>[...current.filter(entry=>entry.id!==String(row.id)),{id:String(row.id),date:row.metric_date,brand:input.brand,contentName:row.content_name,views:Number(row.views),shares:Number(row.shares),followers:Number(row.follower_growth)}])
   }
   const removeMetricEntry=async(id:string)=>{
     if(isSupabaseConfigured)await deleteMetric(Number(id))
