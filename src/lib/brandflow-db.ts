@@ -192,15 +192,17 @@ export async function saveMetric(input: {
 
 export async function deleteMetric(id: number) {
   const client = requireSupabase()
-  const { error } = await client.from('metric_entries').delete().eq('id', id)
+  const { data, error } = await client.from('metric_entries').delete().eq('id', id).select('id')
   if (error) throw error
+  if (!data?.length) throw new Error('没有删除任何数据，请刷新页面后重试。')
 }
 
 export async function deleteMetrics(ids: number[]) {
   if (!ids.length) return
   const client = requireSupabase()
-  const { error } = await client.from('metric_entries').delete().in('id', ids)
+  const { data, error } = await client.from('metric_entries').delete().in('id', ids).select('id')
   if (error) throw error
+  if (data.length !== ids.length) throw new Error(`仅删除了 ${data.length} 条，共选择 ${ids.length} 条，请刷新后重试。`)
 }
 
 type OwnedInsert = Record<string, unknown>
