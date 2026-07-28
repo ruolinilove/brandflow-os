@@ -1,6 +1,6 @@
 # BrandFlow OS
 
-BrandFlow OS 是面向装修品牌内容运营者的开源个人数据中心，把品牌指标、工作计划、项目、内容、素材、灵感和个人花园集中到一个后台中。
+BrandFlow OS 是面向装修品牌内容运营者的开源个人数据中心，把品牌指标、工作计划、项目、内容、素材、灵感与个人休闲空间集中到一个后台中。
 
 ![BrandFlow OS Dashboard](docs/images/dashboard.png)
 
@@ -11,7 +11,7 @@ BrandFlow OS 是面向装修品牌内容运营者的开源个人数据中心，�
 - 月度计划、周计划和视频主题管理
 - 品牌项目、内容生产、素材文件和灵感管理
 - Supabase 邮箱认证、Row Level Security 和私有 Storage
-- 可交互个人花园，支持种植、浇水和采收
+- 可交互农场、牧场和海洋馆，支持种植、养殖、产物收取与生物图鉴
 - 高德地图附近美食搜索，支持评分、距离、品类筛选和导航
 - 响应式浅色 SaaS 界面与 Framer Motion 动效
 
@@ -69,6 +69,13 @@ VITE_AMAP_SECURITY_CODE=your-amap-security-code
 4. `supabase/migrations/202607120004_first_owner_bootstrap.sql`
 5. `supabase/migrations/202607130001_super_admin_role.sql`
 6. `supabase/migrations/202607130002_admin_management.sql`
+7. `supabase/migrations/202607280001_metric_content_name.sql`
+8. `supabase/migrations/202607280002_metric_content_identity.sql`
+9. `supabase/migrations/202607280003_stop_reseeding_metrics.sql`
+10. `supabase/migrations/202607280004_farm_game.sql`
+11. `supabase/migrations/202607280005_aquarium.sql`
+12. `supabase/migrations/202607280006_expand_farm_plots.sql`
+13. `supabase/migrations/202607280007_ranch.sql`
 
 这些迁移会创建业务表、模块初始化函数、私有素材桶和邀请制访问策略。
 
@@ -104,8 +111,12 @@ pnpm dev
 | `contents` | 脚本、拍摄、剪辑和发布记录 |
 | `assets` | Supabase Storage 文件元数据 |
 | `ideas` | 灵感和选题 |
-| `garden_state` | 花园水滴与花币 |
-| `garden_plots` | 九块花圃的成长状态 |
+| `garden_state` | 农场等级、金币、种子与库存 |
+| `garden_plots` | 十八块农田的作物成长状态 |
+| `ranch_state` | 牧场等级、金币、饲料与产物库存 |
+| `ranch_animals` | 牧场动物、健康、饥饿与生产状态 |
+| `aquarium_state` | 海洋馆等级、贝壳与饲料 |
+| `aquarium_creatures` | 海洋生物、健康、饥饿与场景位置 |
 
 完整关系见 [Supabase 数据库设计](docs/18-Supabase数据库设计.md)。
 

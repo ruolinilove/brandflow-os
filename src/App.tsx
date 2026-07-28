@@ -7,7 +7,7 @@ import {
   ChevronDown, CircleDashed, Crown, Database, Download, FileChartColumn, FileText,
   Droplets, Fish, Flower2, FolderKanban, HardDrive, House, Images, LayoutDashboard,
   KeyRound, Lightbulb, LogOut, MapPinned, Menu, MoreHorizontal, Play, Plus, Search, Settings, Share2,
-  ShieldCheck, Sparkles, Sprout, Sun, Trash2, TrendingUp, Trophy, Upload, UserCog, Users,
+  PawPrint, ShieldCheck, Sparkles, Sprout, Sun, Trash2, TrendingUp, Trophy, Upload, UserCog, Users,
   WandSparkles, X,
 } from 'lucide-react'
 import {
@@ -18,6 +18,7 @@ import { isSupabaseConfigured, supabase } from './lib/supabase'
 import { NearbyFood } from './NearbyFood'
 import { FarmGame } from './farm/FarmGame'
 import { AquariumGame } from './aquarium/AquariumGame'
+import { RanchGame } from './ranch/RanchGame'
 import {
   assetsDb, bootstrapBrandFlow, contentsDb, createBrandFlowInvite, deleteMetric, deleteMetrics,
   getBrandFlowAccessRole, ideasDb, isBrandFlowAuthorized, listBrandFlowInvites, listBrandFlowUsers,
@@ -27,7 +28,7 @@ import {
 } from './lib/brandflow-db'
 
 type BrandId = 'brandA' | 'brandB'
-type PageId = 'dashboard' | 'plan' | 'projects' | 'content' | 'data' | 'assets' | 'ideas' | 'garden' | 'aquarium' | 'food' | 'ai' | 'admin' | 'settings'
+type PageId = 'dashboard' | 'plan' | 'projects' | 'content' | 'data' | 'assets' | 'ideas' | 'garden' | 'ranch' | 'aquarium' | 'food' | 'ai' | 'admin' | 'settings'
 type BrandConfig = Record<BrandId, string>
 type MetricEntry = { id: string; date: string; brand: BrandId; contentName: string; views: number; shares: number; followers: number }
 type UserProfile = { displayName: string; jobTitle: string; avatarUrl: string | null }
@@ -45,7 +46,7 @@ const defaultEntries: MetricEntry[] = [
 const navItems = [
   ['dashboard','首页',House],['plan','工作计划',CalendarDays],['projects','项目中心',FolderKanban],
   ['content','内容中心',FileText],['data','数据中心',Database],['assets','素材中心',Images],
-  ['ideas','灵感中心',Lightbulb],['garden','我的农场',Flower2],['aquarium','我的海洋馆',Fish],['food','附近美食',MapPinned],['ai','AI中心',Sparkles],
+  ['ideas','灵感中心',Lightbulb],['garden','我的农场',Flower2],['ranch','我的牧场',PawPrint],['aquarium','我的海洋馆',Fish],['food','附近美食',MapPinned],['ai','AI中心',Sparkles],
   ['admin','管理员设置',UserCog],['settings','设置',Settings],
 ] as const
 
@@ -203,7 +204,7 @@ function App(){
         {dataLoading&&<div className="mb-4 h-1 overflow-hidden rounded-full bg-emerald-100"><motion.div className="h-full w-1/3 rounded-full bg-[#8dcc65]" animate={{x:['-100%','300%']}} transition={{duration:1.2,repeat:Infinity,ease:'easeInOut'}}/></div>}
         <AnimatePresence mode="wait">
           <motion.div key={page} variants={pageMotion} initial="hidden" animate="show" exit={{opacity:0,y:-8,transition:{duration:.18}}}>
-            {page==='dashboard'&&<Dashboard {...pageProps}/>} {page==='plan'&&<WorkPlan/>} {page==='projects'&&<ProjectCenter/>} {page==='content'&&<ContentCenter/>} {page==='data'&&<DataCenter {...pageProps}/>} {page==='assets'&&<Assets/>} {page==='ideas'&&<IdeasCenter/>} {page==='garden'&&<FarmGame profile={profile}/>} {page==='aquarium'&&<AquariumGame profile={profile}/>} {page==='food'&&<NearbyFood/>} {page==='ai'&&<AiPage/>} {page==='admin'&&<AdminSettingsPage accessRole={accessRole}/>} {page==='settings'&&<SettingsPage profile={profile} onSaveProfile={savePersonalProfile} accessRole={accessRole}/>}
+            {page==='dashboard'&&<Dashboard {...pageProps}/>} {page==='plan'&&<WorkPlan/>} {page==='projects'&&<ProjectCenter/>} {page==='content'&&<ContentCenter/>} {page==='data'&&<DataCenter {...pageProps}/>} {page==='assets'&&<Assets/>} {page==='ideas'&&<IdeasCenter/>} {page==='garden'&&<FarmGame profile={profile}/>} {page==='ranch'&&<RanchGame profile={profile}/>} {page==='aquarium'&&<AquariumGame profile={profile}/>} {page==='food'&&<NearbyFood/>} {page==='ai'&&<AiPage/>} {page==='admin'&&<AdminSettingsPage accessRole={accessRole}/>} {page==='settings'&&<SettingsPage profile={profile} onSaveProfile={savePersonalProfile} accessRole={accessRole}/>}
           </motion.div>
         </AnimatePresence>
       </main>

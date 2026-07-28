@@ -1,0 +1,11 @@
+{
+  "background": "/assets/ranch/background/ranch-scene.svg",
+  "animals": {
+    "cow": { "name": "奶牛", "speciesName": "荷斯坦牛", "image": "/assets/ranch/animals/cow.svg", "speed": 15, "size": 118, "feed": "苜蓿草", "zone": "pasture", "productKey": "milk", "productName": "鲜牛奶", "productImage": "/assets/ranch/products/milk.svg", "productValue": 42, "productionSeconds": 480 },
+    "sheep": { "name": "绵羊", "speciesName": "美利奴羊", "image": "/assets/ranch/animals/sheep.svg", "speed": 18, "size": 94, "feed": "牧草", "zone": "pasture", "productKey": "wool", "productName": "柔软羊毛", "productImage": "/assets/ranch/products/wool.svg", "productValue": 36, "productionSeconds": 420 },
+    "pig": { "name": "小猪", "speciesName": "约克夏猪", "image": "/assets/ranch/animals/pig.svg", "speed": 12, "size": 92, "feed": "谷物饲料", "zone": "barn", "productKey": "truffle", "productName": "松露", "productImage": "/assets/ranch/products/truffle.svg", "productValue": 55, "productionSeconds": 600 },
+    "chicken": { "name": "母鸡", "speciesName": "芦花鸡", "image": "/assets/ranch/animals/chicken.svg", "speed": 25, "size": 70, "feed": "玉米粒", "zone": "barn", "productKey": "egg", "productName": "土鸡蛋", "productImage": "/assets/ranch/products/egg.svg", "productValue": 20, "productionSeconds": 300 },
+    "duck": { "name": "鸭子", "speciesName": "麻鸭", "image": "/assets/ranch/animals/duck.svg", "speed": 22, "size": 76, "feed": "谷粒", "zone": "pond", "productKey": "duckEgg", "productName": "鸭蛋", "productImage": "/assets/ranch/products/duck-egg.svg", "productValue": 26, "productionSeconds": 360 },
+    "rabbit": { "name": "兔子", "speciesName": "安哥拉兔", "image": "/assets/ranch/animals/rabbit.svg", "speed": 28, "size": 68, "feed": "胡萝卜", "zone": "pasture", "productKey": "rabbitFluff", "productName": "兔绒", "productImage": "/assets/ranch/products/rabbit-fluff.svg", "productValue": 32, "productionSeconds": 390 }
+  }
+}

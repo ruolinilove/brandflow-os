@@ -1,0 +1,42 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="720" viewBox="0 0 1200 720">
+  <defs>
+    <linearGradient id="sky" x2="0" y2="1"><stop stop-color="#79d7f3"/><stop offset="1" stop-color="#dff7e8"/></linearGradient>
+    <linearGradient id="grass" x2="0" y2="1"><stop stop-color="#82ce4f"/><stop offset="1" stop-color="#3d9a3f"/></linearGradient>
+    <linearGradient id="roof" x2="0" y2="1"><stop stop-color="#e85e42"/><stop offset="1" stop-color="#a92d2d"/></linearGradient>
+    <filter id="shadow"><feDropShadow dx="0" dy="5" stdDeviation="3" flood-color="#1f5b34" flood-opacity=".28"/></filter>
+  </defs>
+  <rect width="1200" height="720" fill="url(#sky)"/>
+  <circle cx="1040" cy="88" r="48" fill="#ffe96a" opacity=".95"/>
+  <g fill="#fff" opacity=".9"><ellipse cx="170" cy="98" rx="72" ry="24"/><ellipse cx="120" cy="104" rx="42" ry="20"/><ellipse cx="225" cy="107" rx="50" ry="18"/><ellipse cx="690" cy="64" rx="60" ry="20"/><ellipse cx="742" cy="71" rx="44" ry="17"/></g>
+  <path d="M0 245Q170 118 348 237Q525 100 715 235Q914 99 1200 235V378H0Z" fill="#78bd58"/>
+  <path d="M0 298Q214 175 418 302Q635 162 866 299Q1041 213 1200 289V418H0Z" fill="#57aa48"/>
+  <rect y="340" width="1200" height="380" fill="url(#grass)"/>
+  <path d="M0 570Q250 520 489 578T970 558T1200 574V720H0Z" fill="#2f863b" opacity=".52"/>
+  <g filter="url(#shadow)">
+    <path d="M63 320L178 222L304 320Z" fill="url(#roof)" stroke="#8b2830" stroke-width="8"/>
+    <rect x="78" y="316" width="210" height="207" rx="8" fill="#eaa75a" stroke="#8b4c2f" stroke-width="8"/>
+    <path d="M157 522V391Q183 350 210 391V522" fill="#75402f" stroke="#5f3329" stroke-width="7"/>
+    <path d="M158 426H209M183 364V519" stroke="#e7c484" stroke-width="5"/>
+    <rect x="101" y="342" width="55" height="52" rx="4" fill="#cdefff" stroke="#fff4ce" stroke-width="7"/>
+    <path d="M128 343V393M102 368H155" stroke="#75a7b6" stroke-width="4"/>
+    <rect x="228" y="350" width="37" height="83" rx="6" fill="#b65a37"/>
+    <path d="M229 360H264M229 379H264M229 398H264M229 417H264" stroke="#e8a96a" stroke-width="5"/>
+  </g>
+  <g filter="url(#shadow)">
+    <ellipse cx="930" cy="526" rx="178" ry="92" fill="#4ac3d9" stroke="#e6c77c" stroke-width="15"/>
+    <ellipse cx="930" cy="526" rx="146" ry="64" fill="#55d8e5"/>
+    <path d="M805 531q45-22 90 0t90 0t90 0" fill="none" stroke="#c7f7f0" stroke-width="5" opacity=".72"/>
+    <g fill="#76bf4b"><ellipse cx="784" cy="473" rx="13" ry="35" transform="rotate(-24 784 473)"/><ellipse cx="1082" cy="492" rx="12" ry="34" transform="rotate(28 1082 492)"/></g>
+  </g>
+  <g stroke="#f5e2aa" stroke-width="12" stroke-linecap="round" filter="url(#shadow)">
+    <path d="M330 390V560M465 382V552M600 377V547M735 384V538"/>
+    <path d="M320 424L760 411M320 505L756 490"/>
+  </g>
+  <g fill="#6c3f27"><circle cx="354" cy="656" r="8"/><circle cx="430" cy="618" r="6"/><circle cx="526" cy="670" r="7"/><circle cx="669" cy="619" r="6"/></g>
+  <g filter="url(#shadow)">
+    <rect x="832" y="340" width="164" height="58" rx="14" fill="#f4d06b" stroke="#84502d" stroke-width="7"/>
+    <path d="M858 398v46M971 398v46" stroke="#84502d" stroke-width="9"/>
+    <text x="914" y="378" text-anchor="middle" font-family="Microsoft YaHei,sans-serif" font-weight="900" font-size="24" fill="#774526">悠闲牧场</text>
+  </g>
+  <g fill="#fff7cf" opacity=".9"><circle cx="45" cy="424" r="5"/><circle cx="68" cy="438" r="4"/><circle cx="1135" cy="405" r="5"/><circle cx="1111" cy="420" r="4"/></g>
+</svg>
