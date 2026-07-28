@@ -1,10 +1,10 @@
 import { AnimatePresence, motion } from 'framer-motion'
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { Coins, PackageOpen, ShoppingBasket, Sparkles, Sprout, Store, Users, Warehouse, X } from 'lucide-react'
+import { Coins, Droplets, MousePointer2, PackageOpen, ShoppingBasket, Sparkles, Sprout, Store, Users, Warehouse, X } from 'lucide-react'
 import { isSupabaseConfigured } from '../lib/supabase'
 import { loadFarmGame, saveFarmGame } from '../lib/brandflow-db'
 import { useFarmAssets } from './farm-assets'
-import { FarmCanvas } from './FarmCanvas'
+import { FarmCanvas, type FarmToolMode } from './FarmCanvas'
 import { stateAtTime, timeUntilReady, type FarmPlayerState, type FarmPlot } from './farm-types'
 
 type FarmGameProps = {
@@ -24,11 +24,16 @@ const defaultPlayer: FarmPlayerState = {
 
 function initialPlots(): FarmPlot[] {
   const now = Date.now()
-  return Array.from({ length: 12 }, (_, position) => {
+  return Array.from({ length: 18 }, (_, position) => {
     if (position === 0) return { position, plantKey: 'sunflower', growthState: 'ready', plantedAt: new Date(now - 30000).toISOString() }
     if (position === 1) return { position, plantKey: 'sunflower', growthState: 'medium', plantedAt: new Date(now - 12500).toISOString() }
     return { position, plantKey: null, growthState: null, plantedAt: null }
   })
+}
+
+function normalizePlots(source?: FarmPlot[]) {
+  const byPosition = new Map((source || []).map(plot => [plot.position, plot]))
+  return Array.from({ length: 18 }, (_, position) => byPosition.get(position) ?? { position, plantKey: null, growthState: null, plantedAt: null })
 }
 
 function readLocalFarm() {
@@ -51,7 +56,8 @@ export function FarmGame({ profile }: FarmGameProps) {
   const assets = useFarmAssets()
   const local = useMemo(readLocalFarm, [])
   const [player, setPlayer] = useState<FarmPlayerState>(local?.player ?? defaultPlayer)
-  const [plots, setPlots] = useState<FarmPlot[]>(local?.plots ?? initialPlots)
+  const [plots, setPlots] = useState<FarmPlot[]>(() => local ? normalizePlots(local.plots) : initialPlots())
+  const [tool, setTool] = useState<FarmToolMode>('auto')
   const [ready, setReady] = useState(!isSupabaseConfigured)
   const [panel, setPanel] = useState<Panel>(null)
   const [notice, setNotice] = useState('阳光正好，点击空土地播种吧')
@@ -63,7 +69,7 @@ export function FarmGame({ profile }: FarmGameProps) {
     let active = true
     loadFarmGame().then((garden: any) => {
       if (!active) return
-      const cloudPlots = Array.from({ length: 12 }, (_, position) => {
+      const cloudPlots = Array.from({ length: 18 }, (_, position) => {
         const row = garden.plots.find((item: any) => Number(item.position) === position)
         if (!row?.plant_key && !row?.flower) return { position, plantKey: null, growthState: null, plantedAt: null } as FarmPlot
         const plantKey = row.plant_key || 'sunflower'
@@ -161,6 +167,18 @@ export function FarmGame({ profile }: FarmGameProps) {
     const plot = plots.find(item => item.position === position)
     if (!plot) return
     const selectedPlant = assets.manifest.plants[player.selectedCrop]
+    if (tool === 'water') {
+      if (!plot.plantKey || !plot.plantedAt) { setNotice('空土地不用浇水，先选择种子播种'); return }
+      if (plot.growthState === 'ready') { setNotice(`${assets.manifest.plants[plot.plantKey].name}已经成熟，可以采收了`); return }
+      const boostedAt = new Date(new Date(plot.plantedAt).getTime() - 4000).toISOString()
+      setPlots(current => current.map(item => item.position === position ? { ...item, plantedAt: boostedAt } : item))
+      setNotice(`浇水完成，${assets.manifest.plants[plot.plantKey].name}加速成长 4 秒`)
+      return
+    }
+    if (tool === 'harvest' && plot.growthState !== 'ready') {
+      setNotice(plot.plantKey ? '作物还没有成熟' : '这块土地还没有作物')
+      return
+    }
     if (!plot.plantKey) {
       const seedCount = player.seeds[player.selectedCrop] || 0
       if (seedCount <= 0) {
@@ -220,7 +238,7 @@ export function FarmGame({ profile }: FarmGameProps) {
     </div>
 
     <section className="relative overflow-hidden rounded-[28px] border-[5px] border-white bg-[#83c768] shadow-[0_24px_70px_rgba(44,91,49,.2)]">
-      {assets.manifest && !assets.loading ? <FarmCanvas plots={plots} manifest={assets.manifest} images={assets.images} onPlotClick={handlePlotClick}/> : <div className="aspect-[5/3] animate-pulse bg-[#c8e7b9]"/>}
+      {assets.manifest && !assets.loading ? <FarmCanvas plots={plots} manifest={assets.manifest} images={assets.images} tool={tool} onPlotClick={handlePlotClick}/> : <div className="h-[340px] animate-pulse bg-[#c8e7b9] sm:h-auto sm:aspect-[5/3]"/>}
 
       <div className="pointer-events-none absolute inset-x-0 top-0 flex items-start justify-between gap-2 p-2.5 sm:p-4">
         <motion.div initial={{ y: -12, opacity: 0 }} animate={{ y: 0, opacity: 1 }} className="pointer-events-auto flex min-w-0 items-center gap-2 rounded-2xl border-2 border-white/80 bg-[#fff8dc]/95 p-2 shadow-[0_7px_0_rgba(111,76,35,.25)] backdrop-blur sm:gap-3 sm:p-3">
@@ -234,8 +252,21 @@ export function FarmGame({ profile }: FarmGameProps) {
         </div>
       </div>
 
-      <div className="absolute bottom-3 left-1/2 w-[calc(100%-24px)] max-w-xl -translate-x-1/2 sm:bottom-5">
+      <div className="absolute left-2.5 top-[92px] w-[190px] sm:bottom-[78px] sm:left-1/2 sm:top-auto sm:w-[calc(100%-24px)] sm:max-w-xl sm:-translate-x-1/2">
         <AnimatePresence mode="wait"><motion.div key={notice} initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }} className="mx-auto w-fit max-w-full rounded-2xl border-2 border-white/80 bg-[#24482e]/88 px-4 py-2 text-center text-[11px] font-semibold leading-5 text-white shadow-lg backdrop-blur sm:text-xs">{notice}</motion.div></AnimatePresence>
+      </div>
+
+      <div className="absolute bottom-2.5 left-1/2 flex -translate-x-1/2 items-center gap-1.5 rounded-2xl border-[3px] border-[#f7e5b8] bg-[#704923]/92 p-1.5 shadow-[0_7px_0_rgba(62,40,20,.32)] backdrop-blur sm:bottom-4 sm:gap-2 sm:p-2">
+        <FarmModeButton label="智能操作" active={tool === 'auto'} icon={<MousePointer2 size={18}/>} onClick={() => { setTool('auto'); setNotice('智能模式：空地播种，成熟作物直接采收') }}/>
+        <FarmModeButton label="浇水加速" active={tool === 'water'} icon={<Droplets size={18}/>} onClick={() => { setTool('water'); setNotice('浇水模式：点击成长中的作物加速 4 秒') }}/>
+        <FarmModeButton label="批量采收" active={tool === 'harvest'} icon={<PackageOpen size={18}/>} onClick={() => { setTool('harvest'); setNotice('采收模式：点击成熟作物进行采收') }}/>
+        <span className="mx-0.5 h-8 w-px bg-[#d4ae72]/70"/>
+        <button onClick={() => setPanel('shop')} className="flex h-10 items-center gap-1.5 rounded-xl bg-[#f2c34e] px-3 text-[10px] font-black text-[#634118] shadow-[0_3px_0_#b57928] sm:text-xs"><Sprout size={16}/>种子 × {player.seeds.sunflower || 0}</button>
+      </div>
+
+      <div className="absolute left-4 top-[118px] hidden w-40 rounded-2xl border-2 border-white/80 bg-[#fff7dc]/92 p-3 text-[#6c4b2a] shadow-lg backdrop-blur xl:block">
+        <div className="flex items-center gap-2 text-xs font-black"><Sparkles size={15} className="text-amber-500"/>今日农场任务</div>
+        <div className="mt-3 space-y-2 text-[10px]"><p className="flex justify-between"><span>播种土地</span><b>{plots.filter(item => item.plantKey).length}/18</b></p><p className="flex justify-between"><span>成熟作物</span><b>{readyCount}</b></p><p className="flex justify-between"><span>仓库收成</span><b>{player.inventory.sunflower || 0}</b></p></div>
       </div>
 
       <div className="absolute right-2.5 top-[92px] flex flex-row gap-2 sm:right-4 sm:top-[106px] sm:flex-col">
@@ -254,9 +285,13 @@ export function FarmGame({ profile }: FarmGameProps) {
     <div className="mt-4 grid gap-3 sm:grid-cols-3">
       <InfoStrip icon={<Sprout size={19}/>} title="种子袋" value={`向日葵 × ${player.seeds.sunflower || 0}`} color="bg-emerald-50 text-emerald-700"/>
       <InfoStrip icon={<PackageOpen size={19}/>} title="今日收成" value={`向日葵 × ${player.inventory.sunflower || 0}`} color="bg-amber-50 text-amber-700"/>
-      <InfoStrip icon={<Sparkles size={19}/>} title="农场状态" value={readyCount ? `${readyCount} 块土地等待收获` : '一切生长正常'} color="bg-sky-50 text-sky-700"/>
+      <InfoStrip icon={<Sparkles size={19}/>} title="18 块经典土地" value={readyCount ? `${readyCount} 块土地等待收获` : '一切生长正常'} color="bg-sky-50 text-sky-700"/>
     </div>
   </div>
+}
+
+function FarmModeButton({ label, icon, active, onClick }: { label: string; icon: React.ReactNode; active: boolean; onClick: () => void }) {
+  return <motion.button whileTap={{ scale: .93 }} title={label} aria-label={label} onClick={onClick} className={`grid size-10 place-items-center rounded-xl border-2 transition ${active ? 'border-[#fff4b5] bg-[#8fd35d] text-white shadow-[0_3px_0_#4e8c36]' : 'border-[#a97642] bg-[#fff5d5] text-[#714a27]'}`}>{icon}</motion.button>
 }
 
 function FarmTool({ icon, label, active, onClick }: { icon: React.ReactNode; label: string; active: boolean; onClick: () => void }) {

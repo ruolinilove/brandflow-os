@@ -3,22 +3,25 @@ import type { FarmAssetManifest, FarmImages, FarmPlot, PlantState } from './farm
 
 const WORLD_WIDTH = 1200
 const WORLD_HEIGHT = 720
-const PLOT_WIDTH = 174
-const PLOT_HEIGHT = 78
+const PLOT_WIDTH = 138
+const PLOT_HEIGHT = 62
+
+export type FarmToolMode = 'auto' | 'water' | 'harvest'
 
 type FarmCanvasProps = {
   plots: FarmPlot[]
   manifest: FarmAssetManifest
   images: FarmImages
+  tool: FarmToolMode
   onPlotClick: (position: number) => void
 }
 
-type PlotEffect = { position: number; type: 'shake' | 'sow' | 'harvest'; startedAt: number }
+type PlotEffect = { position: number; type: 'shake' | 'sow' | 'water' | 'harvest'; startedAt: number }
 
 function plotCenter(position: number) {
-  const row = Math.floor(position / 4)
-  const column = position % 4
-  return { x: 390 + column * 145 + (row % 2) * 18, y: 405 + row * 101 }
+  const row = Math.floor(position / 6)
+  const column = position % 6
+  return { x: 330 + column * 121 + (row % 2) * 15, y: 350 + row * 75 }
 }
 
 function diamondPath(context: CanvasRenderingContext2D, x: number, y: number) {
@@ -36,10 +39,10 @@ function isPointInPlot(x: number, y: number, position: number) {
 }
 
 function plantSize(state: PlantState) {
-  return ({ seed: 54, sprout: 68, small: 88, medium: 110, large: 128, ready: 138, harvest: 124 })[state]
+  return ({ seed: 45, sprout: 57, small: 72, medium: 90, large: 103, ready: 112, harvest: 102 })[state]
 }
 
-export function FarmCanvas({ plots, manifest, images, onPlotClick }: FarmCanvasProps) {
+export function FarmCanvas({ plots, manifest, images, tool, onPlotClick }: FarmCanvasProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const plotsRef = useRef(plots)
   const hoverRef = useRef<number | null>(null)
@@ -117,6 +120,18 @@ export function FarmCanvas({ plots, manifest, images, onPlotClick }: FarmCanvasP
           }
         }
 
+        if (effect?.type === 'water' && age < 720) {
+          for (let drop = 0; drop < 8; drop += 1) {
+            const progress = Math.min(1, age / 620)
+            const dropX = x - 44 + drop * 13 + Math.sin(drop * 2.3) * 6
+            const dropY = center.y - 105 + progress * (82 + drop % 3 * 9)
+            context.beginPath()
+            context.ellipse(dropX, dropY, 4, 7, -.2, 0, Math.PI * 2)
+            context.fillStyle = `rgba(110,211,246,${1 - progress * .55})`
+            context.fill()
+          }
+        }
+
         if (plot.plantKey && plot.growthState) {
           const plant = manifest.plants[plot.plantKey]
           const stage = plant?.states[plot.growthState]
@@ -149,20 +164,20 @@ export function FarmCanvas({ plots, manifest, images, onPlotClick }: FarmCanvasP
               if (sparkle) {
                 const sparkleSize = 31 + Math.sin(phase * 4) * 5
                 context.globalAlpha = .7 + Math.sin(phase * 4) * .2
-                context.drawImage(sparkle, x + 42, center.y - 92, sparkleSize, sparkleSize)
+              context.drawImage(sparkle, x + 34, center.y - 78, sparkleSize, sparkleSize)
                 context.globalAlpha = 1
               }
               context.fillStyle = '#fff7d2'
               context.strokeStyle = '#8b5c28'
               context.lineWidth = 3
               context.beginPath()
-              context.roundRect(x - 34, center.y - 112, 68, 27, 13)
+              context.roundRect(x - 34, center.y - 98, 68, 27, 13)
               context.fill()
               context.stroke()
               context.fillStyle = '#70451f'
               context.font = '700 13px "Microsoft YaHei", sans-serif'
               context.textAlign = 'center'
-              context.fillText('点击收获', x, center.y - 94)
+              context.fillText('点击收获', x, center.y - 80)
             }
           }
         }
@@ -214,7 +229,7 @@ export function FarmCanvas({ plots, manifest, images, onPlotClick }: FarmCanvasP
     ref={canvasRef}
     width={WORLD_WIDTH}
     height={WORLD_HEIGHT}
-    className="block aspect-[5/3] w-full touch-manipulation select-none"
+    className="block h-[340px] w-full touch-manipulation select-none sm:h-auto sm:aspect-[5/3]"
     role="application"
     aria-label="可交互农场，点击空土地播种，点击成熟植物收获"
     tabIndex={0}
@@ -228,7 +243,13 @@ export function FarmCanvas({ plots, manifest, images, onPlotClick }: FarmCanvasP
       const point = pointFromEvent(event)
       const plot = findPlot(point.x, point.y)
       if (!plot) return
-      const type = !plot.plantKey ? 'sow' : plot.growthState === 'ready' ? 'harvest' : 'shake'
+      const type = !plot.plantKey && tool === 'auto'
+        ? 'sow'
+        : plot.plantKey && tool === 'water'
+          ? 'water'
+          : plot.growthState === 'ready' && (tool === 'auto' || tool === 'harvest')
+            ? 'harvest'
+            : 'shake'
       effectsRef.current = [...effectsRef.current.filter(effect => effect.position !== plot.position), { position: plot.position, type, startedAt: performance.now() }]
       onPlotClick(plot.position)
     }}

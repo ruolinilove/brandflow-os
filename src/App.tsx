@@ -45,7 +45,7 @@ const defaultEntries: MetricEntry[] = [
 const navItems = [
   ['dashboard','首页',House],['plan','工作计划',CalendarDays],['projects','项目中心',FolderKanban],
   ['content','内容中心',FileText],['data','数据中心',Database],['assets','素材中心',Images],
-  ['ideas','灵感中心',Lightbulb],['garden','我的花园',Flower2],['aquarium','我的海洋馆',Fish],['food','附近美食',MapPinned],['ai','AI中心',Sparkles],
+  ['ideas','灵感中心',Lightbulb],['garden','我的农场',Flower2],['aquarium','我的海洋馆',Fish],['food','附近美食',MapPinned],['ai','AI中心',Sparkles],
   ['admin','管理员设置',UserCog],['settings','设置',Settings],
 ] as const
 
