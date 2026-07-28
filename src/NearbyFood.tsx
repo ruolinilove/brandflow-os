@@ -304,8 +304,8 @@ export function NearbyFood() {
     <div className="mb-4 flex gap-2 overflow-x-auto pb-1">{categories.map(item=><button key={item} onClick={()=>chooseCategory(item)} aria-pressed={category===item} className={`h-9 shrink-0 rounded-2xl px-4 text-xs font-semibold transition ${category===item?'bg-[#dff2d6] text-[#39713c]':'border border-white bg-white text-slate-400 shadow-sm hover:text-slate-700'}`}>{item}</button>)}</div>
 
     <div className="grid gap-4 xl:grid-cols-[minmax(0,1.35fr)_minmax(360px,.65fr)]">
-      <section className={`${cardClass} relative min-h-[560px] overflow-hidden`}>
-        <div ref={mapElement} className={`absolute inset-0 ${connected?'':'hidden'}`}/>
+      <section className={`${cardClass} relative h-[560px] overflow-hidden`}>
+        <div ref={mapElement} className={`absolute inset-0 h-full w-full ${connected?'':'hidden'}`} style={{height:'100%',width:'100%'}}/>
         {connected&&!mapReady&&<div className="absolute inset-0 z-10 grid place-items-center bg-[#f5f8f4]/90 p-6 text-center backdrop-blur-sm"><div className="max-w-xs"><span className="mx-auto grid size-12 place-items-center rounded-2xl bg-white text-[#72b653] shadow-sm"><MapPin size={22}/></span><p className="mt-4 text-sm font-semibold text-slate-700">{status||'正在加载地图...'}</p><p className="mt-2 text-xs leading-5 text-slate-400">如果持续空白，请检查高德 Key 类型、安全密钥和当前域名白名单。</p></div></div>}
         {!connected&&<div className="absolute inset-0 bg-[#e7eee8]">
           <div className="absolute inset-0 opacity-40" style={{backgroundImage:'linear-gradient(#cdd9cf 1px, transparent 1px), linear-gradient(90deg, #cdd9cf 1px, transparent 1px)',backgroundSize:'56px 56px'}}/>
