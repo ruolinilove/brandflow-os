@@ -1,69 +1,144 @@
 import { useEffect, useRef, useState } from 'react'
 import * as THREE from 'three'
+import { RoomEnvironment } from 'three/examples/jsm/environments/RoomEnvironment.js'
+import { ImprovedNoise } from 'three/examples/jsm/math/ImprovedNoise.js'
+import { EffectComposer } from 'three/examples/jsm/postprocessing/EffectComposer.js'
+import { OutputPass } from 'three/examples/jsm/postprocessing/OutputPass.js'
+import { RenderPass } from 'three/examples/jsm/postprocessing/RenderPass.js'
+import { Sky } from 'three/examples/jsm/objects/Sky.js'
+import { UnrealBloomPass } from 'three/examples/jsm/postprocessing/UnrealBloomPass.js'
 import { SnowParticles } from './SnowParticles'
 
-type FloatingObject = { object: THREE.Object3D; baseY: number; phase: number; amplitude: number; speed: number }
 type DataStream = { curve: THREE.CatmullRomCurve3; node: THREE.Mesh; speed: number; offset: number }
+type FogSprite = { sprite: THREE.Sprite; baseX: number; baseZ: number; phase: number }
+type SnowMaps = { diffuse: THREE.Texture; normal: THREE.Texture; roughness: THREE.Texture }
 
-const iceMaterial = (color: number, opacity = .72) => new THREE.MeshPhysicalMaterial({
-  color,
-  emissive: new THREE.Color(color).multiplyScalar(.08),
-  metalness: .08,
-  roughness: .16,
-  transmission: .3,
-  thickness: 1.4,
-  transparent: true,
-  opacity,
-  flatShading: true,
-  side: THREE.DoubleSide,
-})
-
-function addGlacier(scene: THREE.Scene, x: number, z: number, scale: number, mirrored = false) {
-  const group = new THREE.Group()
-  const material = iceMaterial(0x5ac9ec, .68)
-  const paleMaterial = iceMaterial(0xbceeff, .52)
-  const peaks = [
-    { x: 0, y: 2.2, z: 0, radius: 2.8, height: 7.2, sides: 6 },
-    { x: mirrored ? -2.25 : 2.25, y: 1.35, z: .8, radius: 2.1, height: 5.1, sides: 5 },
-    { x: mirrored ? 1.9 : -1.9, y: .8, z: 1.1, radius: 1.7, height: 4.1, sides: 5 },
-  ]
-  peaks.forEach((peak, index) => {
-    const geometry = new THREE.ConeGeometry(peak.radius, peak.height, peak.sides, 2)
-    const mesh = new THREE.Mesh(geometry, index === 1 ? paleMaterial : material)
-    mesh.position.set(peak.x, peak.y, peak.z)
-    mesh.rotation.y = index * .7 + (mirrored ? .35 : 0)
-    mesh.castShadow = true
-    mesh.receiveShadow = true
-    group.add(mesh)
-  })
-  const base = new THREE.Mesh(new THREE.DodecahedronGeometry(3.9, 0), material)
-  base.scale.set(1.55, .34, 1.05)
-  base.position.y = -.45
-  group.add(base)
-  group.position.set(x, -.25, z)
-  group.scale.setScalar(scale)
-  scene.add(group)
-  return group
+function createFogTexture() {
+  const canvas = document.createElement('canvas')
+  canvas.width = 256
+  canvas.height = 128
+  const context = canvas.getContext('2d')!
+  const gradient = context.createRadialGradient(128, 64, 4, 128, 64, 126)
+  gradient.addColorStop(0, 'rgba(215,247,255,.42)')
+  gradient.addColorStop(.42, 'rgba(125,205,226,.18)')
+  gradient.addColorStop(1, 'rgba(70,150,180,0)')
+  context.fillStyle = gradient
+  context.fillRect(0, 0, 256, 128)
+  return new THREE.CanvasTexture(canvas)
 }
 
-function createCrystalCluster(scene: THREE.Scene, x: number, z: number, color: number, scale: number) {
-  const group = new THREE.Group()
-  const material = iceMaterial(color, .72)
-  ;[
-    { x: 0, y: .8, scale: 1 },
-    { x: -.7, y: .35, scale: .62 },
-    { x: .65, y: .3, scale: .52 },
-  ].forEach((item, index) => {
-    const crystal = new THREE.Mesh(new THREE.OctahedronGeometry(.8, 0), material)
-    crystal.scale.set(.56 * item.scale, 2.3 * item.scale, .56 * item.scale)
-    crystal.position.set(item.x, item.y, index * .15)
-    crystal.rotation.z = (index - 1) * .24
-    group.add(crystal)
+function loadSnowMaps(renderer: THREE.WebGLRenderer): SnowMaps {
+  const loader = new THREE.TextureLoader()
+  const diffuse = loader.load('/assets/background/snow/snow_02_diff_1k.jpg')
+  const normal = loader.load('/assets/background/snow/snow_02_nor_gl_1k.jpg')
+  const roughness = loader.load('/assets/background/snow/snow_02_rough_1k.jpg')
+  diffuse.colorSpace = THREE.SRGBColorSpace
+  ;[diffuse, normal, roughness].forEach(texture => {
+    texture.wrapS = THREE.RepeatWrapping
+    texture.wrapT = THREE.RepeatWrapping
+    texture.repeat.set(7, 7)
+    texture.anisotropy = Math.min(8, renderer.capabilities.getMaxAnisotropy())
   })
-  group.position.set(x, .1, z)
-  group.scale.setScalar(scale)
-  scene.add(group)
-  return group
+  return { diffuse, normal, roughness }
+}
+
+function createMountainGeometry(width: number, depth: number, height: number, seed: number) {
+  const geometry = new THREE.PlaneGeometry(width, depth, 96, 64)
+  const position = geometry.attributes.position as THREE.BufferAttribute
+  const noise = new ImprovedNoise()
+  const normalizedHeights = new Float32Array(position.count)
+  for (let index = 0; index < position.count; index += 1) {
+    const x = position.getX(index)
+    const z = position.getY(index)
+    const normalizedX = x / width
+    const normalizedZ = z / depth
+    const broad = noise.noise(x * .018 + seed, z * .022, seed * .7) * .5 + .5
+    const depthFalloff = Math.pow(Math.max(0, 1 - Math.pow(Math.abs(normalizedZ) * 2, 3)), .42)
+    const widthFalloff = Math.pow(Math.max(0, 1 - Math.pow(Math.abs(normalizedX) * 2, 6)), .34)
+    let ridgedTerrain = 0
+    let normalization = 0
+    let amplitude = .56
+    let frequency = .024
+    for (let octave = 0; octave < 5; octave += 1) {
+      const sample = noise.noise(x * frequency + seed * (1.4 + octave), z * frequency, seed * (2.1 + octave * .7))
+      const ridge = Math.pow(1 - Math.abs(sample), 2)
+      ridgedTerrain += ridge * amplitude
+      normalization += amplitude
+      amplitude *= .48
+      frequency *= 2.03
+    }
+    ridgedTerrain /= normalization
+    const mountainMass = THREE.MathUtils.smoothstep(ridgedTerrain, .28, .88)
+    const erosion = .82 + (1 - Math.abs(noise.noise(x * .085, z * .078, seed * 4.2))) * .22
+    const elevation = Math.max(0, Math.pow(mountainMass, 1.52) * (.78 + broad * .28) * erosion * depthFalloff * widthFalloff)
+    const y = elevation * height
+    position.setZ(index, y)
+    normalizedHeights[index] = THREE.MathUtils.clamp(y / height, 0, 1)
+  }
+  geometry.rotateX(-Math.PI / 2)
+  geometry.computeVertexNormals()
+  const normal = geometry.attributes.normal as THREE.BufferAttribute
+  const rotatedPosition = geometry.attributes.position as THREE.BufferAttribute
+  const colors = new Float32Array(position.count * 3)
+  const rock = new THREE.Color()
+  const snow = new THREE.Color(0xd9e8ec)
+  for (let index = 0; index < rotatedPosition.count; index += 1) {
+    const normalizedHeight = normalizedHeights[index]
+    const slopeSnow = THREE.MathUtils.smoothstep(normal.getY(index), .38, .78)
+    const snowCover = THREE.MathUtils.clamp(slopeSnow + normalizedHeight * .28 - .08, 0, 1)
+    rock.set(normalizedHeight > .62 ? 0x78939e : 0x405d69)
+    rock.lerp(snow, snowCover)
+    colors[index * 3] = rock.r
+    colors[index * 3 + 1] = rock.g
+    colors[index * 3 + 2] = rock.b
+  }
+  geometry.setAttribute('color', new THREE.BufferAttribute(colors, 3))
+  return geometry
+}
+
+function addMountainRange(scene: THREE.Scene, maps: SnowMaps, x: number, z: number, width: number, depth: number, height: number, seed: number, rotation = 0) {
+  const material = new THREE.MeshStandardMaterial({
+    color: 0xffffff,
+    vertexColors: true,
+    roughness: .93,
+    metalness: 0,
+    envMapIntensity: .7,
+    map: maps.diffuse,
+    normalMap: maps.normal,
+    normalScale: new THREE.Vector2(.72, .72),
+    roughnessMap: maps.roughness,
+  })
+  const mountain = new THREE.Mesh(createMountainGeometry(width, depth, height, seed), material)
+  mountain.position.set(x, -1.18, z)
+  mountain.rotation.y = rotation
+  mountain.castShadow = true
+  mountain.receiveShadow = true
+  scene.add(mountain)
+  return mountain
+}
+
+function createSnowfieldGeometry(width: number, depth: number, seed: number) {
+  const geometry = new THREE.PlaneGeometry(width, depth, 100, 100)
+  const position = geometry.attributes.position as THREE.BufferAttribute
+  const noise = new ImprovedNoise()
+  const colors = new Float32Array(position.count * 3)
+  const color = new THREE.Color()
+  for (let index = 0; index < position.count; index += 1) {
+    const x = position.getX(index)
+    const z = position.getY(index)
+    const broad = noise.noise(x * .045 + seed, z * .042, seed) * .18
+    const drift = noise.noise(x * .12, z * .1, seed * 2.3) * .055
+    const elevation = broad + drift + .08
+    position.setZ(index, elevation)
+    color.set(elevation > .14 ? 0xd8e7eb : elevation > 0 ? 0xb9cdd3 : 0x91aab3)
+    colors[index * 3] = color.r
+    colors[index * 3 + 1] = color.g
+    colors[index * 3 + 2] = color.b
+  }
+  geometry.setAttribute('color', new THREE.BufferAttribute(colors, 3))
+  geometry.rotateX(-Math.PI / 2)
+  geometry.computeVertexNormals()
+  return geometry
 }
 
 function createDataStreams(scene: THREE.Scene) {
@@ -74,7 +149,7 @@ function createDataStreams(scene: THREE.Scene) {
     new THREE.Vector3(-7, 4.3, -15), new THREE.Vector3(8, 3.6, -17),
   ]
   endpoints.forEach((endpoint, index) => {
-    const start = new THREE.Vector3(0, 1.7, -7)
+    const start = new THREE.Vector3(0, 5.2, -26)
     const curve = new THREE.CatmullRomCurve3([
       start,
       new THREE.Vector3(endpoint.x * .28, .35 + index % 2 * 1.3, -6 - index * 1.2),
@@ -82,11 +157,11 @@ function createDataStreams(scene: THREE.Scene) {
       endpoint,
     ])
     const lineGeometry = new THREE.BufferGeometry().setFromPoints(curve.getPoints(80))
-    const line = new THREE.Line(lineGeometry, new THREE.LineBasicMaterial({ color: index % 2 ? 0x34e9ff : 0x7fffd6, transparent: true, opacity: .36 }))
+    const line = new THREE.Line(lineGeometry, new THREE.LineBasicMaterial({ color: index % 2 ? 0x34e9ff : 0x7fffd6, transparent: true, opacity: .18 }))
     scene.add(line)
     const tube = new THREE.Mesh(
       new THREE.TubeGeometry(curve, 80, .018, 5, false),
-      new THREE.MeshBasicMaterial({ color: index % 2 ? 0x53e5ff : 0x70ffd0, transparent: true, opacity: .5, blending: THREE.AdditiveBlending }),
+      new THREE.MeshBasicMaterial({ color: index % 2 ? 0x53e5ff : 0x70ffd0, transparent: true, opacity: .26, blending: THREE.AdditiveBlending }),
     )
     scene.add(tube)
     const node = new THREE.Mesh(
@@ -118,10 +193,10 @@ export function IceScene() {
     }
 
     renderer.setPixelRatio(Math.min(window.devicePixelRatio, isMobile ? 1.35 : 1.8))
-    renderer.setSize(container.clientWidth, container.clientHeight)
+    renderer.setSize(container.clientWidth, container.clientHeight, false)
     renderer.outputColorSpace = THREE.SRGBColorSpace
     renderer.toneMapping = THREE.ACESFilmicToneMapping
-    renderer.toneMappingExposure = 1.05
+    renderer.toneMappingExposure = .62
     renderer.shadowMap.enabled = !isMobile
     renderer.shadowMap.type = THREE.PCFShadowMap
     renderer.domElement.setAttribute('aria-label', '沉浸式未来冰雪数据世界')
@@ -130,77 +205,80 @@ export function IceScene() {
     container.appendChild(renderer.domElement)
 
     const scene = new THREE.Scene()
-    scene.background = new THREE.Color(0x061426)
-    scene.fog = new THREE.FogExp2(0x071a31, isMobile ? .024 : .019)
+    scene.fog = new THREE.Fog(0x7fa6b6, isMobile ? 25 : 32, isMobile ? 72 : 88)
     const camera = new THREE.PerspectiveCamera(isMobile ? 64 : 54, container.clientWidth / container.clientHeight, .1, 110)
-    camera.position.set(0, 3.6, isMobile ? 14.5 : 13)
+    camera.position.set(0, isMobile ? 3.1 : 2.8, isMobile ? 14.5 : 13)
 
-    const ambient = new THREE.HemisphereLight(0xbcefff, 0x06213d, 2.3)
+    const sky = new Sky()
+    sky.scale.setScalar(450)
+    const skyUniforms = sky.material.uniforms
+    skyUniforms.turbidity.value = 3.2
+    skyUniforms.rayleigh.value = .55
+    skyUniforms.mieCoefficient.value = .0015
+    skyUniforms.mieDirectionalG.value = .78
+    const sunPosition = new THREE.Vector3().setFromSphericalCoords(1, THREE.MathUtils.degToRad(68), THREE.MathUtils.degToRad(214))
+    skyUniforms.sunPosition.value.copy(sunPosition)
+    scene.add(sky)
+
+    const snowMaps = loadSnowMaps(renderer)
+    const fogTexture = createFogTexture()
+    const pmrem = new THREE.PMREMGenerator(renderer)
+    pmrem.compileEquirectangularShader()
+    const roomEnvironment = new RoomEnvironment()
+    const environmentTexture = pmrem.fromScene(roomEnvironment, .04).texture
+    scene.environment = environmentTexture
+
+    const ambient = new THREE.HemisphereLight(0xdaf4ff, 0x183447, .72)
     scene.add(ambient)
-    const moon = new THREE.DirectionalLight(0xdff8ff, 3.2)
-    moon.position.set(-8, 12, 5)
-    moon.castShadow = !isMobile
-    moon.shadow.mapSize.set(1024, 1024)
-    scene.add(moon)
-    const rim = new THREE.DirectionalLight(0x36bfff, 1.8)
-    rim.position.set(10, 4, -12)
+    const sun = new THREE.DirectionalLight(0xf1fbff, 1.25)
+    sun.position.set(-16, 22, 7)
+    sun.castShadow = !isMobile
+    sun.shadow.mapSize.set(2048, 2048)
+    sun.shadow.camera.left = -24
+    sun.shadow.camera.right = 24
+    sun.shadow.camera.top = 20
+    sun.shadow.camera.bottom = -12
+    scene.add(sun)
+    const rim = new THREE.DirectionalLight(0x7fdcff, .34)
+    rim.position.set(12, 6, -20)
     scene.add(rim)
 
-    const floor = new THREE.Mesh(
-      new THREE.PlaneGeometry(70, 70, 1, 1),
-      new THREE.MeshPhysicalMaterial({ color: 0x1a6c8f, metalness: .35, roughness: .18, transparent: true, opacity: .72, clearcoat: 1, clearcoatRoughness: .08 }),
+    const snowfield = new THREE.Mesh(
+      createSnowfieldGeometry(70, 70, 4.7),
+      new THREE.MeshStandardMaterial({
+        color: 0xffffff,
+        vertexColors: true,
+        roughness: .96,
+        metalness: 0,
+        envMapIntensity: .45,
+        map: snowMaps.diffuse,
+        normalMap: snowMaps.normal,
+        normalScale: new THREE.Vector2(.88, .88),
+        roughnessMap: snowMaps.roughness,
+      }),
     )
-    floor.rotation.x = -Math.PI / 2
-    floor.position.y = -1.05
-    floor.receiveShadow = true
-    scene.add(floor)
-    const grid = new THREE.GridHelper(56, 56, 0x3af2ff, 0x1b6786)
-    grid.position.y = -1.01
-    const gridMaterials = Array.isArray(grid.material) ? grid.material : [grid.material]
-    gridMaterials.forEach(material => { material.transparent = true; material.opacity = .16 })
-    scene.add(grid)
+    snowfield.position.y = -1.08
+    snowfield.receiveShadow = true
+    scene.add(snowfield)
 
-    addGlacier(scene, -10.2, -10, 1.35)
-    addGlacier(scene, 10.4, -12.5, 1.55, true)
-    addGlacier(scene, -14, 1.5, .9, true)
-    addGlacier(scene, 14, 2.5, .86)
-
-    const floaters: FloatingObject[] = []
-    ;[
-      { x: -5.6, y: 2.2, z: -5, scale: 1.15, color: 0x7edcff },
-      { x: 6.4, y: 2.8, z: -3.2, scale: .86, color: 0x4dffd1 },
-      { x: -3.4, y: 4.7, z: -14, scale: .7, color: 0xb2efff },
-      { x: 4.1, y: 5.1, z: -16, scale: .78, color: 0x70bfff },
-    ].forEach((item, index) => {
-      const block = new THREE.Mesh(new THREE.DodecahedronGeometry(1.4, 0), iceMaterial(item.color, .62))
-      block.position.set(item.x, item.y, item.z)
-      block.scale.set(item.scale * 1.35, item.scale * .62, item.scale)
-      block.rotation.set(index * .2, index * .7, index * .12)
-      block.castShadow = true
-      scene.add(block)
-      floaters.push({ object: block, baseY: item.y, phase: index * 1.7, amplitude: .18 + index * .035, speed: .35 + index * .05 })
-    })
-
-    const crystals = [
-      createCrystalCluster(scene, -5.8, -1.7, 0x74dfff, 1),
-      createCrystalCluster(scene, 6.3, -2.2, 0x71ffd2, .82),
-      createCrystalCluster(scene, -8.2, -10.5, 0xa7edff, 1.2),
-      createCrystalCluster(scene, 8.5, -12.3, 0x4fc9ff, 1.1),
-    ]
+    addMountainRange(scene, snowMaps, 0, -29, 58, 18, 12, 1.15)
+    addMountainRange(scene, snowMaps, -17, -17, 32, 15, 8.2, 3.45, .14)
+    addMountainRange(scene, snowMaps, 18, -18, 34, 16, 9.4, 6.8, -.16)
+    addMountainRange(scene, snowMaps, -8, -23, 28, 12, 7.2, 8.6, .05)
 
     const core = new THREE.Group()
     const coreMesh = new THREE.Mesh(
-      new THREE.IcosahedronGeometry(1.05, 2),
-      new THREE.MeshStandardMaterial({ color: 0xbaffff, emissive: 0x25d9ff, emissiveIntensity: 3.4, roughness: .18, metalness: .2, transparent: true, opacity: .92 }),
+      new THREE.IcosahedronGeometry(.72, 3),
+      new THREE.MeshStandardMaterial({ color: 0xbaffff, emissive: 0x25d9ff, emissiveIntensity: 1.7, roughness: .2, metalness: .15, transparent: true, opacity: .84 }),
     )
     core.add(coreMesh)
     const coreGlow = new THREE.Mesh(
-      new THREE.SphereGeometry(1.45, 32, 32),
-      new THREE.MeshBasicMaterial({ color: 0x20d5ff, transparent: true, opacity: .09, blending: THREE.AdditiveBlending, side: THREE.BackSide }),
+      new THREE.SphereGeometry(1.02, 32, 32),
+      new THREE.MeshBasicMaterial({ color: 0x20d5ff, transparent: true, opacity: .055, blending: THREE.AdditiveBlending, side: THREE.BackSide }),
     )
     core.add(coreGlow)
     const rings: THREE.Mesh[] = []
-    ;[1.75, 2.18, 2.62].forEach((radius, index) => {
+    ;[1.15, 1.46, 1.78].forEach((radius, index) => {
       const ring = new THREE.Mesh(
         new THREE.TorusGeometry(radius, .025 + index * .008, 8, 100),
         new THREE.MeshBasicMaterial({ color: index === 1 ? 0x68ffd0 : 0x5ddfff, transparent: true, opacity: .62, blending: THREE.AdditiveBlending }),
@@ -209,31 +287,46 @@ export function IceScene() {
       rings.push(ring)
       core.add(ring)
     })
-    core.position.set(0, 1.65, -7)
-    const coreLight = new THREE.PointLight(0x35dcff, 7.5, 14, 1.8)
+    core.position.set(0, 5.2, -26)
+    core.scale.setScalar(.34)
+    const coreLight = new THREE.PointLight(0x35dcff, 3.2, 9, 1.8)
     core.add(coreLight)
     scene.add(core)
-
-    const coreReflection = core.clone(true)
-    coreReflection.position.y = -3.65
-    coreReflection.scale.y = -.65
-    coreReflection.traverse(child => {
-      if (child instanceof THREE.Mesh) {
-        const materials = (Array.isArray(child.material) ? child.material : [child.material]).map(material => material.clone())
-        child.material = Array.isArray(child.material) ? materials : materials[0]
-        materials.forEach(material => {
-          const reflectedMaterial = material as THREE.Material & { opacity?: number; transparent?: boolean }
-          reflectedMaterial.transparent = true
-          reflectedMaterial.opacity = Math.min(reflectedMaterial.opacity ?? 1, .11)
-        })
-      }
-      if (child instanceof THREE.Light) child.intensity = 0
-    })
-    scene.add(coreReflection)
 
     const dataStreams = createDataStreams(scene)
     const snow = new SnowParticles(isMobile)
     scene.add(snow.group)
+
+    const fogSprites: FogSprite[] = []
+    const fogMaterial = new THREE.SpriteMaterial({
+      map: fogTexture,
+      color: 0xb9edfa,
+      transparent: true,
+      opacity: isMobile ? .022 : .032,
+      depthWrite: false,
+      blending: THREE.AdditiveBlending,
+    })
+    const fogCount = isMobile ? 5 : 9
+    for (let index = 0; index < fogCount; index += 1) {
+      const sprite = new THREE.Sprite(fogMaterial.clone())
+      const x = THREE.MathUtils.randFloatSpread(28)
+      const z = THREE.MathUtils.randFloat(-20, 4)
+      sprite.position.set(x, -.62 + Math.random() * .42, z)
+      sprite.scale.set(7 + Math.random() * 8, 1.45 + Math.random() * 1.3, 1)
+      scene.add(sprite)
+      fogSprites.push({ sprite, baseX: x, baseZ: z, phase: index * 1.37 })
+    }
+
+    const composer = new EffectComposer(renderer)
+    composer.addPass(new RenderPass(scene, camera))
+    const bloom = new UnrealBloomPass(
+      new THREE.Vector2(container.clientWidth, container.clientHeight),
+      isMobile ? .06 : .11,
+      isMobile ? .18 : .24,
+      1.25,
+    )
+    composer.addPass(bloom)
+    composer.addPass(new OutputPass())
 
     const pointer = new THREE.Vector2()
     const targetPointer = new THREE.Vector2()
@@ -255,6 +348,7 @@ export function IceScene() {
       const width = Math.max(1, container.clientWidth)
       const height = Math.max(1, container.clientHeight)
       renderer.setSize(width, height, false)
+      composer.setSize(width, height)
       camera.aspect = width / height
       camera.fov = width < 700 ? 64 : 54
       camera.updateProjectionMatrix()
@@ -279,32 +373,31 @@ export function IceScene() {
       pointer.lerp(targetPointer, reduceMotion ? .025 : .055)
       const travel = scrollProgress * (isMobile ? 6.5 : 8.5)
       camera.position.x += (pointer.x * (isMobile ? .65 : 1.55) - camera.position.x) * .035
-      camera.position.y += ((isMobile ? 3.4 : 3.7) + pointer.y * .62 - scrollProgress * 1.15 - camera.position.y) * .035
+      camera.position.y += ((isMobile ? 3.05 : 2.75) + pointer.y * .46 - scrollProgress * .72 - camera.position.y) * .035
       camera.position.z += ((isMobile ? 14.5 : 13) - travel - camera.position.z) * .028
-      camera.lookAt(pointer.x * .45, .85 - scrollProgress * .45, -7 - travel * .7)
+      camera.lookAt(pointer.x * .45, 2.2 - scrollProgress * .35, -10.5 - travel * .7)
 
       if (!reduceMotion) {
-        floaters.forEach((floater, index) => {
-          floater.object.position.y = floater.baseY + Math.sin(elapsed * floater.speed + floater.phase) * floater.amplitude
-          floater.object.rotation.y += delta * (.08 + index * .018)
-          floater.object.rotation.z += delta * .025
-        })
-        crystals.forEach((crystal, index) => { crystal.rotation.y = Math.sin(elapsed * .16 + index) * .12 })
         core.rotation.y += delta * .22
         coreMesh.rotation.x -= delta * .16
         coreMesh.rotation.z += delta * .12
         rings.forEach((ring, index) => { ring.rotation.z += delta * (.18 + index * .09); ring.rotation.y -= delta * (.08 + index * .03) })
         const pulse = 1 + Math.sin(elapsed * 1.8) * .045
         coreGlow.scale.setScalar(pulse)
-        coreLight.intensity = 7.2 + Math.sin(elapsed * 2.1) * 1.2
+        coreLight.intensity = 3 + Math.sin(elapsed * 2.1) * .45
         dataStreams.forEach(stream => {
           const progress = (Math.max(0, elapsed) * stream.speed + stream.offset) % .999
           stream.node.position.copy(stream.curve.getPoint(progress))
         })
         snow.update(delta, elapsed)
       }
-      grid.position.z = (scrollProgress * 4) % 1
-      renderer.render(scene, camera)
+      fogSprites.forEach((fog, index) => {
+        fog.sprite.position.x = fog.baseX + Math.sin(elapsed * (.035 + index * .002) + fog.phase) * 2.1
+        fog.sprite.position.z = fog.baseZ + Math.cos(elapsed * .025 + fog.phase) * .8
+        const material = fog.sprite.material as THREE.SpriteMaterial
+        material.opacity = (isMobile ? .016 : .022) + (Math.sin(elapsed * .18 + fog.phase) + 1) * .007
+      })
+      composer.render()
       animationFrame = requestAnimationFrame(render)
     }
     animationFrame = requestAnimationFrame(render)
@@ -322,6 +415,14 @@ export function IceScene() {
         const materials = Array.isArray(child.material) ? child.material : [child.material]
         materials.forEach(material => material.dispose())
       })
+      composer.dispose()
+      environmentTexture.dispose()
+      roomEnvironment.dispose()
+      pmrem.dispose()
+      snowMaps.diffuse.dispose()
+      snowMaps.normal.dispose()
+      snowMaps.roughness.dispose()
+      fogTexture.dispose()
       renderer.dispose()
       renderer.forceContextLoss()
       renderer.domElement.remove()

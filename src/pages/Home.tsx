@@ -24,7 +24,7 @@ export function Home() {
 
   return <div id="top" className="relative min-h-[225vh] overflow-clip bg-[#061426] text-white selection:bg-cyan-100 selection:text-[#071a31]">
     <IceScene/>
-    <div className="pointer-events-none fixed inset-0 z-10 bg-[#020a15]/18"/>
+    <div className="pointer-events-none fixed inset-0 z-10 bg-[linear-gradient(90deg,rgba(2,10,21,.62)_0%,rgba(2,10,21,.28)_48%,rgba(2,10,21,.08)_100%)]"/>
     <Navbar/>
 
     <main className="relative z-20">
