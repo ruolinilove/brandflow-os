@@ -15,6 +15,7 @@ import {
   ResponsiveContainer, Tooltip, XAxis, YAxis,
 } from 'recharts'
 import { isSupabaseConfigured, supabase } from './lib/supabase'
+import { navigateTo } from './utils/auth'
 import { NearbyFood } from './NearbyFood'
 import { FarmGame } from './farm/FarmGame'
 import { AquariumGame } from './aquarium/AquariumGame'
@@ -109,7 +110,7 @@ function AccessDenied(){
   return <div className="grid min-h-screen place-items-center bg-[#f2f6f2] p-4"><motion.div initial={{opacity:0,y:14}} animate={{opacity:1,y:0}} className={`${cardClass} w-full max-w-md p-8 text-center`}><span className="mx-auto grid size-14 place-items-center rounded-2xl bg-amber-50 text-amber-600"><KeyRound size={24}/></span><h1 className="mt-5 text-xl font-semibold">账号尚未获得访问授权</h1><p className="mt-2 text-sm leading-6 text-slate-500">该账号不是通过有效邀请码注册的，无法进入 BrandFlow 数据中心。</p><button onClick={()=>supabase?.auth.signOut()} className="mt-6 h-11 rounded-2xl bg-[#8dcc65] px-6 text-sm font-semibold text-white">退出并更换账号</button></motion.div></div>
 }
 
-function App(){
+function DataCenterApp({route}:{route:'login'|'dashboard'}){
   const [page,setPage]=useState<PageId>('dashboard')
   const [menuOpen,setMenuOpen]=useState(false)
   const [search,setSearch]=useState('')
@@ -132,6 +133,13 @@ function App(){
     const {data:{subscription}}=supabase.auth.onAuthStateChange((_event,nextSession)=>{setSession(nextSession);setAccessState(nextSession?'checking':'denied');setAuthLoading(false)})
     return ()=>subscription.unsubscribe()
   },[])
+
+  useEffect(()=>{
+    if(authLoading)return
+    if(!isSupabaseConfigured){if(route==='login')navigateTo('/dashboard',true);return}
+    if(session&&route==='login')navigateTo('/dashboard',true)
+    if(!session&&route==='dashboard')navigateTo('/login',true)
+  },[authLoading,session,route])
 
   useEffect(()=>{
     if(!session||!supabase)return
@@ -190,6 +198,8 @@ function App(){
   const pageProps={entries,setEntries,brands,setBrands,chartData,totals,onAddMetric:addMetricEntry,onDeleteMetric:removeMetricEntry,onDeleteMetrics:removeMetricEntries}
 
   if(authLoading)return <LoadingScreen label="正在连接品牌数据中心..."/>
+  if(route==='login'&&session)return <LoadingScreen label="正在进入数据中心..."/>
+  if(route==='dashboard'&&isSupabaseConfigured&&!session)return <LoadingScreen label="正在前往登录页面..."/>
   if(isSupabaseConfigured&&!session)return <AuthScreen/>
   if(isSupabaseConfigured&&accessState==='checking')return <LoadingScreen label="正在验证访问权限..."/>
   if(isSupabaseConfigured&&accessState==='denied')return <AccessDenied/>
@@ -845,4 +855,4 @@ function SettingsPage({
   );
 }
 
-export default App
+export default DataCenterApp

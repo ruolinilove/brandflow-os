@@ -11,3 +11,6 @@ button { cursor: pointer; }
 ::-webkit-scrollbar { width: 9px; height: 9px; }
 ::-webkit-scrollbar-track { background: transparent; }
 ::-webkit-scrollbar-thumb { background: #cfdbd0; border: 3px solid #f2f6f2; border-radius: 999px; }
+html.immersive-home { background: #061426; scrollbar-color: #2b728e #061426; }
+html.immersive-home ::-webkit-scrollbar-track, html.immersive-home::-webkit-scrollbar-track { background: #061426; }
+html.immersive-home ::-webkit-scrollbar-thumb, html.immersive-home::-webkit-scrollbar-thumb { background: #2b728e; border-color: #061426; }
