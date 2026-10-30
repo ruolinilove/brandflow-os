@@ -5,7 +5,11 @@ const DataCenterApp = lazy(() => import('../App'))
 const Home = lazy(() => import('../pages/Home').then(module => ({ default: module.Home })))
 
 function normalizedPath() {
-  const path = window.location.pathname.replace(/\/+$/, '') || '/'
+  const base = import.meta.env.BASE_URL
+  const pathname = window.location.pathname.startsWith(base)
+    ? `/${window.location.pathname.slice(base.length)}`
+    : window.location.pathname
+  const path = pathname.replace(/\/+$/, '') || '/'
   return path
 }
 

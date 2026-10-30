@@ -14,8 +14,9 @@ import {
   Area, AreaChart, Bar, BarChart, CartesianGrid, Legend, Line, LineChart,
   ResponsiveContainer, Tooltip, XAxis, YAxis,
 } from 'recharts'
-import { isSupabaseConfigured, supabase } from './lib/supabase'
-import { navigateTo } from './utils/auth'
+import { isProductionBuild, isSupabaseConfigured, supabase } from './lib/supabase'
+import { getAuthErrorMessage } from './lib/auth-errors'
+import { appPath, navigateTo } from './utils/auth'
 import { NearbyFood } from './NearbyFood'
 import { FarmGame } from './farm/FarmGame'
 import { AquariumGame } from './aquarium/AquariumGame'
@@ -96,18 +97,47 @@ function AuthScreen(){
   const submit=async(event:React.FormEvent)=>{
     event.preventDefault();if(!supabase)return
     setLoading(true);setMessage('')
-    const result=mode==='signin'
-      ?await supabase.auth.signInWithPassword({email,password})
-      :await supabase.auth.signUp({email,password,options:{data:{brandflow_invite_code:inviteCode}}})
-    setLoading(false)
-    if(result.error){setMessage(result.error.message.includes('Database error')?'邀请码无效、已过期或已被使用。':result.error.message);return}
-    if(mode==='signup'&&!result.data.session)setMessage('注册成功，请前往邮箱确认后再登录。')
+    try{
+      const result=mode==='signin'
+        ?await supabase.auth.signInWithPassword({email,password})
+        :await supabase.auth.signUp({email,password,options:{data:{brandflow_invite_code:inviteCode}}})
+      if(result.error){setMessage(getAuthErrorMessage(result.error,mode));return}
+      if(mode==='signup'&&!result.data.session)setMessage('注册成功，请前往邮箱确认后再登录。')
+    }catch(error){setMessage(getAuthErrorMessage(error,mode))}
+    finally{setLoading(false)}
   }
-  return <div className="relative grid min-h-screen place-items-center overflow-hidden bg-[#eaf2e7] p-4"><img src="/assets/project-home.jpg" alt="创艺装饰空间" className="absolute inset-0 h-full w-full object-cover opacity-25"/><div className="absolute inset-0 bg-white/60 backdrop-blur-sm"/><motion.main initial={{opacity:0,y:18}} animate={{opacity:1,y:0}} className="relative w-full max-w-md rounded-3xl border border-white bg-white/95 p-6 shadow-[0_30px_90px_rgba(42,70,52,0.18)] sm:p-8"><div className="flex items-center gap-3"><span className="grid size-12 place-items-center rounded-2xl bg-[#9ad66f] text-lg font-black text-white shadow-lg shadow-lime-200">B</span><div><h1 className="text-xl font-semibold">BrandFlow OS</h1><p className="mt-1 text-xs text-slate-400">品牌数据中心</p></div></div><div className="mt-8 flex rounded-2xl bg-[#f3f7f1] p-1">{([['signin','登录'],['signup','注册']] as const).map(([id,label])=><button type="button" key={id} onClick={()=>{setMode(id);setMessage('')}} className={`h-10 flex-1 rounded-xl text-sm font-semibold transition ${mode===id?'bg-white text-[#4f8248] shadow-sm':'text-slate-400'}`}>{label}</button>)}</div><form onSubmit={submit} className="mt-6 space-y-4"><Field label="邮箱"><input type="email" required autoComplete="email" value={email} onChange={e=>setEmail(e.target.value)} placeholder="name@example.com"/></Field><Field label="密码"><input type="password" required minLength={6} autoComplete={mode==='signin'?'current-password':'new-password'} value={password} onChange={e=>setPassword(e.target.value)} placeholder="至少 6 位密码"/></Field>{mode==='signup'&&<Field label="六位邀请码"><div className="relative rounded-2xl bg-[#f3f7f1] p-2 transition focus-within:bg-[#edf6e9] focus-within:ring-4 focus-within:ring-emerald-50"><input aria-label="六位邀请码" inputMode="numeric" pattern="[0-9]{6}" maxLength={6} autoComplete="one-time-code" value={inviteCode} onChange={e=>setInviteCode(e.target.value.replace(/\D/g,'').slice(0,6))} className="absolute inset-0 z-10 h-full w-full cursor-text opacity-0"/><div aria-hidden="true" className="grid grid-cols-6 gap-2">{Array.from({length:6},(_,index)=><span key={index} className={`grid h-11 min-w-0 place-items-center rounded-xl border bg-white text-lg font-semibold transition ${inviteCode[index]?'border-[#9dcc87] text-[#3f7341] shadow-sm':'border-white text-slate-300'}`}>{inviteCode[index]||'·'}</span>)}</div></div><p className="mt-2 text-[11px] text-slate-400">首次安装可留空，其他用户需填写超级管理员提供的邀请码</p></Field>}{message&&<p className={`rounded-2xl px-4 py-3 text-xs leading-5 ${message.includes('成功')?'bg-emerald-50 text-emerald-700':'bg-rose-50 text-rose-600'}`}>{message}</p>}<SubmitButton label={loading?'请稍候...':mode==='signin'?'登录数据中心':'使用邀请码注册'}/></form></motion.main></div>
+  const requestPasswordReset=async()=>{
+    if(!supabase||!email.trim()){setMessage('请先填写注册邮箱。');return}
+    setLoading(true);setMessage('')
+    const {error}=await supabase.auth.resetPasswordForEmail(email.trim(),{redirectTo:`${window.location.origin}${appPath('/login')}`})
+    setLoading(false)
+    setMessage(error?getAuthErrorMessage(error,'reset'):'密码重置邮件已发送，请检查邮箱。')
+  }
+  return <div className="relative grid min-h-screen place-items-center overflow-hidden bg-[#eaf2e7] p-4"><img src="/assets/project-home.jpg" alt="创艺装饰空间" className="absolute inset-0 h-full w-full object-cover opacity-25"/><div className="absolute inset-0 bg-white/60 backdrop-blur-sm"/><motion.main initial={{opacity:0,y:18}} animate={{opacity:1,y:0}} className="relative w-full max-w-md rounded-3xl border border-white bg-white/95 p-6 shadow-[0_30px_90px_rgba(42,70,52,0.18)] sm:p-8"><div className="flex items-center gap-3"><span className="grid size-12 place-items-center rounded-2xl bg-[#9ad66f] text-lg font-black text-white shadow-lg shadow-lime-200">B</span><div><h1 className="text-xl font-semibold">BrandFlow OS</h1><p className="mt-1 text-xs text-slate-400">品牌数据中心</p></div></div><div className="mt-8 flex rounded-2xl bg-[#f3f7f1] p-1">{([['signin','登录'],['signup','注册']] as const).map(([id,label])=><button type="button" key={id} onClick={()=>{setMode(id);setMessage('')}} className={`h-10 flex-1 rounded-xl text-sm font-semibold transition ${mode===id?'bg-white text-[#4f8248] shadow-sm':'text-slate-400'}`}>{label}</button>)}</div><form onSubmit={submit} className="mt-6 space-y-4"><Field label="邮箱"><input type="email" required autoComplete="email" value={email} onChange={e=>setEmail(e.target.value)} placeholder="name@example.com"/></Field><Field label="密码"><input type="password" required minLength={6} autoComplete={mode==='signin'?'current-password':'new-password'} value={password} onChange={e=>setPassword(e.target.value)} placeholder="至少 6 位密码"/></Field>{mode==='signup'&&<Field label="六位邀请码"><div className="relative rounded-2xl bg-[#f3f7f1] p-2 transition focus-within:bg-[#edf6e9] focus-within:ring-4 focus-within:ring-emerald-50"><input aria-label="六位邀请码" inputMode="numeric" pattern="[0-9]{6}" maxLength={6} autoComplete="one-time-code" value={inviteCode} onChange={e=>setInviteCode(e.target.value.replace(/\D/g,'').slice(0,6))} className="absolute inset-0 z-10 h-full w-full cursor-text opacity-0"/><div aria-hidden="true" className="grid grid-cols-6 gap-2">{Array.from({length:6},(_,index)=><span key={index} className={`grid h-11 min-w-0 place-items-center rounded-xl border bg-white text-lg font-semibold transition ${inviteCode[index]?'border-[#9dcc87] text-[#3f7341] shadow-sm':'border-white text-slate-300'}`}>{inviteCode[index]||'·'}</span>)}</div></div><p className="mt-2 text-[11px] text-slate-400">首次安装可留空，其他用户需填写超级管理员提供的邀请码</p></Field>}{message&&<p className={`rounded-2xl px-4 py-3 text-xs leading-5 ${message.includes('成功')||message.includes('已发送')?'bg-emerald-50 text-emerald-700':'bg-rose-50 text-rose-600'}`}>{message}</p>}<SubmitButton label={loading?'请稍候...':mode==='signin'?'登录数据中心':'使用邀请码注册'}/>{mode==='signin'&&<button type="button" onClick={requestPasswordReset} disabled={loading} className="w-full text-center text-xs font-medium text-[#4f8248] transition hover:text-[#315e35] disabled:opacity-50">忘记密码</button>}</form></motion.main></div>
+}
+
+function PasswordResetScreen({onComplete}:{onComplete:()=>void}){
+  const [password,setPassword]=useState('')
+  const [confirmPassword,setConfirmPassword]=useState('')
+  const [loading,setLoading]=useState(false)
+  const [message,setMessage]=useState('')
+  const submit=async(event:React.FormEvent)=>{
+    event.preventDefault()
+    if(!supabase)return
+    if(password!==confirmPassword){setMessage('两次输入的密码不一致。');return}
+    setLoading(true);setMessage('')
+    const {error}=await supabase.auth.updateUser({password})
+    if(error){setMessage(getAuthErrorMessage(error,'reset'));setLoading(false);return}
+    await supabase.auth.signOut()
+    setLoading(false)
+    onComplete()
+  }
+  return <div className="relative grid min-h-screen place-items-center overflow-hidden bg-[#eaf2e7] p-4"><img src="/assets/project-home.jpg" alt="创艺装饰空间" className="absolute inset-0 h-full w-full object-cover opacity-25"/><div className="absolute inset-0 bg-white/60 backdrop-blur-sm"/><motion.main initial={{opacity:0,y:18}} animate={{opacity:1,y:0}} className="relative w-full max-w-md rounded-3xl border border-white bg-white/95 p-6 shadow-[0_30px_90px_rgba(42,70,52,0.18)] sm:p-8"><span className="grid size-12 place-items-center rounded-2xl bg-[#9ad66f] text-white shadow-lg shadow-lime-200"><KeyRound size={22}/></span><h1 className="mt-5 text-xl font-semibold">设置新密码</h1><p className="mt-2 text-sm leading-6 text-slate-500">请输入一组未在其他网站使用的新密码。</p><form onSubmit={submit} className="mt-6 space-y-4"><Field label="新密码"><input type="password" required minLength={8} autoComplete="new-password" value={password} onChange={event=>setPassword(event.target.value)} placeholder="至少 8 位密码"/></Field><Field label="再次输入新密码"><input type="password" required minLength={8} autoComplete="new-password" value={confirmPassword} onChange={event=>setConfirmPassword(event.target.value)} placeholder="再次输入新密码"/></Field>{message&&<p className="rounded-2xl bg-rose-50 px-4 py-3 text-xs leading-5 text-rose-600">{message}</p>}<SubmitButton label={loading?'正在保存...':'保存新密码'}/></form></motion.main></div>
 }
 
 function AccessDenied(){
-  return <div className="grid min-h-screen place-items-center bg-[#f2f6f2] p-4"><motion.div initial={{opacity:0,y:14}} animate={{opacity:1,y:0}} className={`${cardClass} w-full max-w-md p-8 text-center`}><span className="mx-auto grid size-14 place-items-center rounded-2xl bg-amber-50 text-amber-600"><KeyRound size={24}/></span><h1 className="mt-5 text-xl font-semibold">账号尚未获得访问授权</h1><p className="mt-2 text-sm leading-6 text-slate-500">该账号不是通过有效邀请码注册的，无法进入 BrandFlow 数据中心。</p><button onClick={()=>supabase?.auth.signOut()} className="mt-6 h-11 rounded-2xl bg-[#8dcc65] px-6 text-sm font-semibold text-white">退出并更换账号</button></motion.div></div>
+  const client = supabase
+  return <div className="grid min-h-screen place-items-center bg-[#f2f6f2] p-4"><motion.div initial={{opacity:0,y:14}} animate={{opacity:1,y:0}} className={`${cardClass} w-full max-w-md p-8 text-center`}><span className="mx-auto grid size-14 place-items-center rounded-2xl bg-amber-50 text-amber-600"><KeyRound size={24}/></span><h1 className="mt-5 text-xl font-semibold">暂时无法进入数据后台</h1><p className="mt-2 text-sm leading-6 text-slate-500">{isProductionBuild&&!isSupabaseConfigured?'线上登录服务尚未配置，请联系管理员完成部署设置。':'该账号不是通过有效邀请码注册的，无法进入 BrandFlow 数据中心。'}</p>{client&&<button onClick={()=>client.auth.signOut()} className="mt-6 h-11 rounded-2xl bg-[#8dcc65] px-6 text-sm font-semibold text-white">退出并更换账号</button>}</motion.div></div>
 }
 
 function DataCenterApp({route}:{route:'login'|'dashboard'}){
@@ -115,6 +145,7 @@ function DataCenterApp({route}:{route:'login'|'dashboard'}){
   const [menuOpen,setMenuOpen]=useState(false)
   const [search,setSearch]=useState('')
   const [session,setSession]=useState<Session|null>(null)
+  const [passwordRecovery,setPasswordRecovery]=useState(()=>window.location.hash.includes('type=recovery')||window.location.search.includes('type=recovery'))
   const [authLoading,setAuthLoading]=useState(isSupabaseConfigured)
   const [accessState,setAccessState]=useState<'checking'|'granted'|'denied'>(isSupabaseConfigured?'checking':'granted')
   const [accessRole,setAccessRole]=useState<AccessRole>(isSupabaseConfigured?'member':'super_admin')
@@ -130,16 +161,16 @@ function DataCenterApp({route}:{route:'login'|'dashboard'}){
   useEffect(()=>{
     if(!supabase){setAuthLoading(false);return}
     supabase.auth.getSession().then(({data})=>{setSession(data.session);setAccessState(data.session?'checking':'denied');setAuthLoading(false)})
-    const {data:{subscription}}=supabase.auth.onAuthStateChange((_event,nextSession)=>{setSession(nextSession);setAccessState(nextSession?'checking':'denied');setAuthLoading(false)})
+    const {data:{subscription}}=supabase.auth.onAuthStateChange((event,nextSession)=>{if(event==='PASSWORD_RECOVERY')setPasswordRecovery(true);setSession(nextSession);setAccessState(nextSession?'checking':'denied');setAuthLoading(false)})
     return ()=>subscription.unsubscribe()
   },[])
 
   useEffect(()=>{
     if(authLoading)return
-    if(!isSupabaseConfigured){if(route==='login')navigateTo('/dashboard',true);return}
-    if(session&&route==='login')navigateTo('/dashboard',true)
+    if(!isSupabaseConfigured){if(route==='login'&&!isProductionBuild)navigateTo('/dashboard',true);return}
+    if(session&&route==='login'&&!passwordRecovery)navigateTo('/dashboard',true)
     if(!session&&route==='dashboard')navigateTo('/login',true)
-  },[authLoading,session,route])
+  },[authLoading,session,route,passwordRecovery])
 
   useEffect(()=>{
     if(!session||!supabase)return
@@ -198,9 +229,11 @@ function DataCenterApp({route}:{route:'login'|'dashboard'}){
   const pageProps={entries,setEntries,brands,setBrands,chartData,totals,onAddMetric:addMetricEntry,onDeleteMetric:removeMetricEntry,onDeleteMetrics:removeMetricEntries}
 
   if(authLoading)return <LoadingScreen label="正在连接品牌数据中心..."/>
+  if(route==='login'&&passwordRecovery)return <PasswordResetScreen onComplete={()=>{setPasswordRecovery(false);navigateTo('/login',true)}}/>
   if(route==='login'&&session)return <LoadingScreen label="正在进入数据中心..."/>
   if(route==='dashboard'&&isSupabaseConfigured&&!session)return <LoadingScreen label="正在前往登录页面..."/>
   if(isSupabaseConfigured&&!session)return <AuthScreen/>
+  if(isProductionBuild&&!isSupabaseConfigured)return <AccessDenied/>
   if(isSupabaseConfigured&&accessState==='checking')return <LoadingScreen label="正在验证访问权限..."/>
   if(isSupabaseConfigured&&accessState==='denied')return <AccessDenied/>
 

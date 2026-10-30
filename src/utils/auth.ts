@@ -1,15 +1,21 @@
-import { isSupabaseConfigured, supabase } from '../lib/supabase'
+import { isProductionBuild, isSupabaseConfigured, supabase } from '../lib/supabase'
 
 export const APP_NAVIGATION_EVENT = 'brandflow:navigate'
 
+export function appPath(path: string) {
+  const base = import.meta.env.BASE_URL
+  return `${base}${path.replace(/^\/+/, '')}`
+}
+
 export function navigateTo(path: string, replace = false) {
-  if (window.location.pathname === path) return
-  window.history[replace ? 'replaceState' : 'pushState']({}, '', path)
+  const destination = appPath(path)
+  if (window.location.pathname === destination) return
+  window.history[replace ? 'replaceState' : 'pushState']({}, '', destination)
   window.dispatchEvent(new Event(APP_NAVIGATION_EVENT))
 }
 
-export async function getDataCenterDestination() {
-  if (!isSupabaseConfigured || !supabase) return '/dashboard'
+export async function hasDataCenterSession() {
+  if (!isSupabaseConfigured || !supabase) return !isProductionBuild
   const { data } = await supabase.auth.getSession()
-  return data.session ? '/dashboard' : '/login'
+  return Boolean(data.session)
 }
