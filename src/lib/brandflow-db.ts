@@ -243,6 +243,39 @@ export const plansDb = {
   },
 }
 
+const november2026PlanSeed = [
+  { brandCode: 'brandA' as const, due_date: '2026-11-03', summary: '品质交付·实景鉴赏', title: '装修完工实景及空间设计展示' },
+  { brandCode: 'brandA' as const, due_date: null, summary: '真实业主·品质见证', title: '业主真实装修体验与口碑分享' },
+  { brandCode: 'brandA' as const, due_date: '2026-11-12', summary: '品牌文化·共创共享', title: '贵开店分红仪式' },
+  { brandCode: 'brandA' as const, due_date: '2026-11-19', summary: '匠心服务·售后关怀', title: '装修交付后的售后回访' },
+  { brandCode: 'brandA' as const, due_date: '2026-11-26', summary: '品牌形象·门店巡礼', title: '水城店门店形象及服务介绍' },
+  { brandCode: 'brandB' as const, due_date: '2026-11-05', summary: '理想新家·实景赏析', title: '装修完工实景及空间设计展示' },
+  { brandCode: 'brandB' as const, due_date: '2026-11-07', summary: '节气企划·立冬篇', title: '立冬节气创意主题视频' },
+  { brandCode: 'brandB' as const, due_date: null, summary: '业主心声·真实分享', title: '业主真实装修体验与口碑分享' },
+  { brandCode: 'brandB' as const, due_date: '2026-11-22', summary: '节气企划·小雪篇', title: '小雪节气创意主题视频' },
+]
+
+export async function ensureNovember2026Plans() {
+  const client = requireSupabase()
+  const ownerId = await currentUserId()
+  const { data: brands, error: brandError } = await client.from('brands').select('id,code').eq('owner_id', ownerId)
+  if (brandError) throw brandError
+  const brandIds = new Map((brands || []).map(brand => [brand.code as BrandCode, brand.id as string]))
+  const { data: existing, error: existingError } = await client.from('plans').select('id,brand_id,title,summary,due_date').eq('owner_id', ownerId).eq('period', 'month').gte('created_at', '2026-10-30T00:00:00Z')
+  if (existingError) throw existingError
+  const existingKeys = new Set((existing || []).map(row => `${row.brand_id}:${row.title}:${row.summary}:${row.due_date || 'pending'}`))
+  const missing = november2026PlanSeed.flatMap(plan => {
+    const brandId = brandIds.get(plan.brandCode)
+    if (!brandId || existingKeys.has(`${brandId}:${plan.title}:${plan.summary}:${plan.due_date || 'pending'}`)) return []
+    return [{ owner_id: ownerId, brand_id: brandId, title: plan.title, summary: plan.summary, period: 'month', status: '待开始', due_date: plan.due_date }]
+  })
+  if (missing.length) {
+    const { error } = await client.from('plans').insert(missing)
+    if (error) throw error
+  }
+  return plansDb.list()
+}
+
 export const projectsDb = {
   list: () => listWithBrand('projects'),
   create: async (input: OwnedInsert & { brandCode?: BrandCode }) => {
