@@ -1,4 +1,4 @@
-import { copyFile, readdir, readFile, writeFile } from 'node:fs/promises'
+import { copyFile, mkdir, readdir, readFile, writeFile } from 'node:fs/promises'
 import { extname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
@@ -22,3 +22,7 @@ async function rewriteAssetPaths(directory) {
 
 await rewriteAssetPaths(outputDirectory)
 await copyFile(new URL('index.html', outputDirectoryUrl), new URL('404.html', outputDirectoryUrl))
+for (const route of ['login', 'dashboard']) {
+  await mkdir(new URL(`${route}/`, outputDirectoryUrl), { recursive: true })
+  await copyFile(new URL('index.html', outputDirectoryUrl), new URL(`${route}/index.html`, outputDirectoryUrl))
+}
