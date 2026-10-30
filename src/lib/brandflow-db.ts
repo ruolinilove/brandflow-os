@@ -293,9 +293,36 @@ export const projectsDb = {
 
 export const contentsDb = {
   list: () => listWithBrand('contents'),
+  listPlanScripts: async () => {
+    const client = requireSupabase()
+    const { data, error } = await client.from('contents').select('id,plan_id,title,summary,channel,brands(code,name)').eq('channel', '编导脚本').not('plan_id', 'is', null)
+    return assertData(data, error)
+  },
   create: async (input: OwnedInsert & { brandCode?: BrandCode }) => {
     const { brandCode, ...row } = input
     return insertOwned('contents', { ...row, brand_id: await resolveBrandId(brandCode) })
+  },
+  savePlanScript: async (input: { planId: string; brandCode: BrandCode; title: string; script: string; publishDate?: string | null }) => {
+    const client = requireSupabase()
+    const ownerId = await currentUserId()
+    const brandId = await resolveBrandId(input.brandCode)
+    const { data: existing, error: findError } = await client.from('contents').select('id').eq('owner_id', ownerId).eq('plan_id', input.planId).eq('channel', '编导脚本').maybeSingle()
+    if (findError) throw findError
+    const row = {
+      owner_id: ownerId,
+      brand_id: brandId,
+      plan_id: input.planId,
+      title: input.title,
+      summary: input.script,
+      content_format: '短视频',
+      channel: '编导脚本',
+      status: '脚本中',
+      planned_publish_date: input.publishDate || null,
+    }
+    const result = existing
+      ? await client.from('contents').update(row).eq('id', existing.id).eq('owner_id', ownerId).select('*').single()
+      : await client.from('contents').insert(row).select('*').single()
+    return assertData(result.data, result.error)
   },
 }
 
