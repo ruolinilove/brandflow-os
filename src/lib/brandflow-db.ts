@@ -241,6 +241,12 @@ export const plansDb = {
     const { brandCode, ...row } = input
     return insertOwned('plans', { ...row, brand_id: await resolveBrandId(brandCode) })
   },
+  remove: async (id: string) => {
+    const client = requireSupabase()
+    const { data, error } = await client.from('plans').delete().eq('id', id).select('id')
+    if (error) throw error
+    if (!data?.length) throw new Error('没有删除任何计划，请刷新页面后重试。')
+  },
 }
 
 const november2026PlanSeed = [
@@ -263,6 +269,7 @@ export async function ensureNovember2026Plans() {
   const brandIds = new Map((brands || []).map(brand => [brand.code as BrandCode, brand.id as string]))
   const { data: existing, error: existingError } = await client.from('plans').select('id,brand_id,title,summary,due_date').eq('owner_id', ownerId).eq('period', 'month').gte('created_at', '2026-10-30T00:00:00Z')
   if (existingError) throw existingError
+  if (existing?.length) return plansDb.list()
   const existingKeys = new Set((existing || []).map(row => `${row.brand_id}:${row.title}:${row.summary}:${row.due_date || 'pending'}`))
   const missing = november2026PlanSeed.flatMap(plan => {
     const brandId = brandIds.get(plan.brandCode)
