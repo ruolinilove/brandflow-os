@@ -404,6 +404,7 @@ function WorkPlan(){
   const [pendingDeletePlan,setPendingDeletePlan]=useState<PlanItem|null>(null)
   const [deletingPlan,setDeletingPlan]=useState(false)
   const [updatingStatusKey,setUpdatingStatusKey]=useState('')
+  const [activeStatusMenuKey,setActiveStatusMenuKey]=useState('')
 
   useEffect(()=>{
     if(!isSupabaseConfigured)return
@@ -435,6 +436,14 @@ function WorkPlan(){
   useEffect(()=>{if(!isSupabaseConfigured)localStorage.setItem('brandflow-plan-scripts',JSON.stringify(planScripts))},[planScripts])
   useEffect(()=>{localStorage.setItem('brandflow-plan-months',JSON.stringify(planMonths))},[planMonths])
   useEffect(()=>{
+    if(!activeStatusMenuKey)return
+    const closeMenu=()=>setActiveStatusMenuKey('')
+    const closeOnEscape=(event:KeyboardEvent)=>{if(event.key==='Escape')closeMenu()}
+    document.addEventListener('click',closeMenu)
+    document.addEventListener('keydown',closeOnEscape)
+    return ()=>{document.removeEventListener('click',closeMenu);document.removeEventListener('keydown',closeOnEscape)}
+  },[activeStatusMenuKey])
+  useEffect(()=>{
     const derived=customPlans.map(inferPlanMonth).filter(Boolean)
     if(derived.length)setPlanMonths(current=>Array.from(new Set([...current,...derived])).sort())
   },[customPlans])
@@ -450,6 +459,7 @@ function WorkPlan(){
     return '未开始'
   }
   const statusStyle=(status:ProductionStatus)=>status==='已完成'?'border-emerald-100 bg-emerald-50 text-emerald-700':status==='正在制作'?'border-sky-100 bg-sky-50 text-sky-700':'border-slate-100 bg-slate-50 text-slate-500'
+  const statusDot=(status:ProductionStatus)=>status==='已完成'?'bg-emerald-500':status==='正在制作'?'bg-sky-500':'bg-slate-300'
   const planScriptKey=(plan:PlanItem)=>plan.id||`${plan.brand||'brand'}:${plan.title}`
   const planScript=(plan:PlanItem)=>planScripts[planScriptKey(plan)]
   const activeMonthLabel=selectedMonth?monthLabel(selectedMonth):''
@@ -518,7 +528,9 @@ function WorkPlan(){
   }
   const statusSelect=(plan:PlanItem,compact=false)=>{
     const status=planStatus(plan),key=planScriptKey(plan),saving=updatingStatusKey===key
-    return <label onClick={event=>event.stopPropagation()} className={`inline-flex items-center gap-1.5 rounded-xl border font-semibold transition ${statusStyle(status)} ${compact?'px-2 py-1 text-xs':'px-3 py-2 text-sm'}`}><CircleDashed size={compact?13:14}/><select aria-label={`${plan.title}制作状态`} value={status} disabled={saving} onChange={event=>updatePlanStatus(plan,event.target.value as ProductionStatus)} className="cursor-pointer appearance-none bg-transparent pr-1 outline-none disabled:cursor-wait"><option value="未开始">未开始</option><option value="正在制作">正在制作</option><option value="已完成">已完成</option></select>{saving&&<span className="animate-pulse">···</span>}</label>
+    const menuKey=`${key}:${compact?'overview':'card'}`,open=activeStatusMenuKey===menuKey
+    const choices:Array<{value:ProductionStatus;desc:string}>=[{value:'未开始',desc:'尚未进入制作'},{value:'正在制作',desc:'拍摄或剪辑中'},{value:'已完成',desc:'视频已经完成'}]
+    return <div onClick={event=>event.stopPropagation()} className="relative inline-flex"><motion.button type="button" whileTap={{scale:.97}} disabled={saving} aria-expanded={open} aria-haspopup="menu" onClick={()=>setActiveStatusMenuKey(current=>current===menuKey?'':menuKey)} className={`inline-flex items-center justify-center gap-2 rounded-full border font-semibold shadow-sm transition hover:shadow-md disabled:cursor-wait ${statusStyle(status)} ${compact?'h-8 min-w-[88px] px-2.5 text-xs':'h-10 min-w-[116px] px-4 text-sm'}`}><span className={`size-2 rounded-full ${statusDot(status)} ${status==='正在制作'?'animate-pulse':''}`}/><span>{saving?'保存中':status}</span><ChevronDown size={compact?13:15} className={`transition ${open?'rotate-180':''}`}/></motion.button><AnimatePresence>{open&&<motion.div role="menu" initial={{opacity:0,y:-6,scale:.96}} animate={{opacity:1,y:0,scale:1}} exit={{opacity:0,y:-4,scale:.97}} transition={{duration:.16}} className="absolute right-0 top-full z-40 mt-2 w-48 rounded-2xl border border-slate-100 bg-white p-2 text-left shadow-[0_18px_50px_rgba(31,52,40,0.18)]"><p className="px-3 pb-2 pt-1 text-[10px] font-semibold uppercase tracking-[.14em] text-slate-400">视频制作状态</p>{choices.map(choice=><button type="button" role="menuitemradio" aria-checked={status===choice.value} key={choice.value} onClick={()=>{setActiveStatusMenuKey('');updatePlanStatus(plan,choice.value)}} className={`flex w-full items-center gap-3 rounded-xl px-3 py-2.5 transition ${status===choice.value?'bg-[#f3f8f0]':'hover:bg-slate-50'}`}><span className={`size-2.5 shrink-0 rounded-full ${statusDot(choice.value)}`}/><span className="min-w-0 flex-1"><b className="block text-sm font-semibold text-slate-700">{choice.value}</b><small className="mt-0.5 block text-[11px] text-slate-400">{choice.desc}</small></span>{status===choice.value&&<CheckCircle2 size={16} className="text-[#67a756]"/>}</button>)}</motion.div>}</AnimatePresence></div>
   }
   const openPlanScript=(plan:PlanItem)=>{
     setActiveScriptPlan(plan)
@@ -561,13 +573,13 @@ function WorkPlan(){
   const overviewBrandCard=(brand:string,index:number)=>{
     const rows=brandPlans(brand)
     const isChuangyi=index===0
-    return <Card key={brand} className="overflow-hidden">
-      <div className={`flex items-center justify-between border-b p-5 sm:p-6 ${isChuangyi?'border-[#e1eddd] bg-[#f4f9f1]':'border-[#deeeec] bg-[#f1f8f7]'}`}>
+    return <Card key={brand} className="relative">
+      <div className={`flex items-center justify-between rounded-t-3xl border-b p-5 sm:p-6 ${isChuangyi?'border-[#e1eddd] bg-[#f4f9f1]':'border-[#deeeec] bg-[#f1f8f7]'}`}>
         <div className="flex items-center gap-3"><span className={`grid size-11 place-items-center rounded-2xl text-base font-black ${isChuangyi?'bg-[#dff2d6] text-[#4f8248]':'bg-[#dff2ef] text-[#43827d]'}`}>{isChuangyi?'创':'喜'}</span><div><h3 className="text-lg font-semibold">{brand}</h3><p className="mt-1 text-sm text-slate-500">{rows.length?`${rows.length}条视频制作计划`:'本月暂未安排视频'}</p></div></div>
         <span className={`rounded-full bg-white px-3 py-1.5 text-sm font-semibold ${isChuangyi?'text-[#4f8248]':'text-[#43827d]'}`}>{rows.length} 条</span>
       </div>
       {rows.length?<><div className="hidden grid-cols-[74px_166px_minmax(0,1fr)_96px_72px] gap-3 border-b border-slate-100 bg-[#fbfcfa] px-6 py-3 text-xs font-semibold text-slate-500 sm:grid"><span>时间</span><span>类型 / 栏目</span><span>视频重点</span><span>状态</span><span className="text-right">操作</span></div><div className="divide-y divide-slate-100">{rows.map((plan,rowIndex)=><div key={`${brand}-overview-${plan.id||rowIndex}`} role="button" tabIndex={0} aria-label={`打开 ${plan.title} 编导脚本`} onClick={()=>openPlanScript(plan)} onKeyDown={event=>{if(event.key==='Enter'||event.key===' '){event.preventDefault();openPlanScript(plan)}}} className="grid cursor-pointer grid-cols-[60px_minmax(0,1fr)_72px] items-center gap-3 px-5 py-4 transition hover:bg-[#fbfdf9] sm:grid-cols-[74px_166px_minmax(0,1fr)_96px_72px] sm:px-6"><span className={`text-sm font-semibold ${plan.date?'text-slate-600':'text-amber-600'}`}>{planDate(plan.date)}</span><span className="hidden min-w-0 sm:block"><span className="inline-flex max-w-full truncate rounded-lg border border-[#dcebd6] bg-[#f1f8ed] px-2.5 py-1.5 text-xs font-semibold text-[#4f8248]">{plan.summary||'视频计划'}</span></span><button onClick={event=>{event.stopPropagation();openPlanScript(plan)}} className="min-w-0 text-left"><b className="block text-base font-semibold leading-7 text-slate-900 sm:line-clamp-2">{plan.title}</b><small className="mt-2 inline-flex max-w-full rounded-lg border border-[#dcebd6] bg-[#f1f8ed] px-2.5 py-1.5 text-xs font-semibold text-[#4f8248] sm:hidden">类型 · {plan.summary||'视频计划'}</small><small className="mt-1 block text-sm text-slate-500 sm:hidden">状态 · {planStatus(plan)}</small></button><span className="hidden sm:block">{statusSelect(plan,true)}</span><span className="flex justify-end gap-1"><button onClick={event=>{event.stopPropagation();openPlanScript(plan)}} aria-label={`打开 ${plan.title} 编导脚本`} title="打开脚本" className="grid size-8 place-items-center rounded-xl text-[#5e9950] transition hover:bg-white"><FileText size={16}/></button><button onClick={event=>{event.stopPropagation();setPendingDeletePlan(plan)}} aria-label={`删除计划 ${plan.title}`} className="grid size-8 place-items-center rounded-xl text-slate-400 transition hover:bg-rose-50 hover:text-rose-500"><Trash2 size={16}/></button></span></div>)}</div></>:<div className="p-8 text-center"><span className="mx-auto grid size-12 place-items-center rounded-2xl bg-slate-50 text-slate-300"><CalendarDays size={20}/></span><p className="mt-3 text-base font-medium text-slate-500">还没有视频计划</p><p className="mt-1 text-sm text-slate-500">点击上方“新建计划”开始安排</p></div>}
-      <div className={`flex items-center justify-between border-t px-5 py-4 text-sm sm:px-6 ${isChuangyi?'border-[#e1eddd] bg-[#fafcf9]':'border-[#deeeec] bg-[#f9fcfb]'}`}><span className="text-slate-500">固定日期 {rows.filter(plan=>plan.date).length} 条</span><span className="font-medium text-amber-600">待定 {rows.filter(plan=>!plan.date).length} 条</span></div>
+      <div className={`flex items-center justify-between rounded-b-3xl border-t px-5 py-4 text-sm sm:px-6 ${isChuangyi?'border-[#e1eddd] bg-[#fafcf9]':'border-[#deeeec] bg-[#f9fcfb]'}`}><span className="text-slate-500">固定日期 {rows.filter(plan=>plan.date).length} 条</span><span className="font-medium text-amber-600">待定 {rows.filter(plan=>!plan.date).length} 条</span></div>
     </Card>
   }
   if(!selectedMonth){
