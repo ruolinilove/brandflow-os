@@ -1,11 +1,12 @@
 import { AnimatePresence, motion } from 'framer-motion'
 import { BookOpen, Fish, HeartPulse, Shell, Utensils, Waves, X } from 'lucide-react'
-import { useEffect, useMemo, useState } from 'react'
+import { lazy, Suspense, useEffect, useMemo, useState } from 'react'
 import { loadAquarium, saveAquarium } from '../lib/brandflow-db'
 import { isSupabaseConfigured } from '../lib/supabase'
 import { useAquariumAssets } from './aquarium-assets'
-import { AquariumCanvas } from './AquariumCanvas'
 import type { AquariumCreature, AquariumPlayer } from './aquarium-types'
+
+const AquariumScene3D = lazy(() => import('./AquariumScene3D').then(module => ({ default: module.AquariumScene3D })))
 
 type AquariumGameProps = { profile: { displayName: string; avatarUrl: string | null } }
 
@@ -144,7 +145,7 @@ export function AquariumGame({ profile }: AquariumGameProps) {
     <div className="mb-4 flex flex-wrap items-end justify-between gap-3 px-1"><div><p className="text-xs font-semibold uppercase text-[#2383a1]">My Aquarium</p><h1 className="mt-1 text-2xl font-semibold">我的海洋馆</h1></div><div className="flex items-center gap-2 text-xs text-slate-400"><span>{creatures.length} 种生物</span><i className="size-1 rounded-full bg-slate-300"/><span className="font-semibold text-cyan-700">平均饱食度 {averageHunger}%</span></div></div>
 
     <section className="relative overflow-hidden rounded-[28px] border-[5px] border-white bg-[#0879a8] shadow-[0_24px_70px_rgba(16,94,126,.23)]">
-      {assets.manifest && !assets.loading ? <AquariumCanvas creatures={creatures} manifest={assets.manifest} images={assets.images} selectedId={selectedId} feedPulse={feedPulse} onSelect={id => setSelectedId(id)}/> : <div className="aspect-[5/3] animate-pulse bg-cyan-200"/>}
+      {assets.manifest && !assets.loading ? <Suspense fallback={<div className="grid aspect-[5/3] place-items-center bg-gradient-to-b from-[#0a6e91] to-[#052f48] text-sm font-semibold text-white/70">正在进入3D海洋世界...</div>}><AquariumScene3D creatures={creatures} manifest={assets.manifest} selectedId={selectedId} feedPulse={feedPulse} onSelect={id => setSelectedId(id)}/></Suspense> : <div className="aspect-[5/3] animate-pulse bg-cyan-200"/>}
 
       <div className="pointer-events-none absolute inset-x-0 top-0 flex items-start justify-between gap-2 p-2.5 sm:p-4">
         <div className="pointer-events-auto flex min-w-0 items-center gap-2 rounded-2xl border-2 border-white/70 bg-[#eafcff]/92 p-2 shadow-[0_7px_0_rgba(8,64,91,.25)] backdrop-blur sm:gap-3 sm:p-3">
