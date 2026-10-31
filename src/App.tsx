@@ -354,6 +354,22 @@ function RecentTable({entries,brands}:{entries:MetricEntry[];brands:BrandConfig}
 
 function WorkPlan(){
   type PlanItem={id?:string;title:string;summary?:string;brand?:string;period:string;date:string;status?:string}
+  type StoryboardShot={shotNumber:string;shotContent:string;shotTypeMovement:string;visualDescription:string;dialogueSubtitle:string;duration:string;notes:string}
+  type PlanScript={id?:string;script?:string;shots:StoryboardShot[]}
+  const blankShot=(shotNumber='01'):StoryboardShot=>({shotNumber,shotContent:'',shotTypeMovement:'',visualDescription:'',dialogueSubtitle:'',duration:'',notes:''})
+  const exampleShots:StoryboardShot[]=[
+    {shotNumber:'01',shotContent:'开场展示',shotTypeMovement:'全景/推进',visualDescription:'客厅整体空间展示',dialogueSubtitle:'现代简约，让空间回归舒适',duration:'5秒',notes:'稳定运镜'},
+    {shotNumber:'02',shotContent:'客厅细节',shotTypeMovement:'近景/横移',visualDescription:'展示电视背景墙及材质细节',dialogueSubtitle:'简洁线条，呈现空间层次',duration:'7秒',notes:'注意构图'},
+    {shotNumber:'03',shotContent:'餐厅展示',shotTypeMovement:'全景/固定',visualDescription:'展示餐桌及餐厅布局',dialogueSubtitle:'让日常生活更有氛围',duration:'6秒',notes:'突出空间感'},
+  ]
+  const legacyScriptShots=(script=''):StoryboardShot[]=>script.trim()?[{...blankShot('01'),visualDescription:script}]:[]
+  const storedScriptShots=(script=''):StoryboardShot[]=>{
+    try{
+      const parsed=JSON.parse(script)
+      if(parsed?.version===1&&Array.isArray(parsed.shots))return parsed.shots.map((shot:any)=>({shotNumber:shot.shotNumber||'',shotContent:shot.shotContent||'',shotTypeMovement:shot.shotTypeMovement||'',visualDescription:shot.visualDescription||'',dialogueSubtitle:shot.dialogueSubtitle||'',duration:shot.duration||'',notes:shot.notes||''}))
+    }catch{}
+    return legacyScriptShots(script)
+  }
   const legacyNovemberTitles=['装修完工实景及空间设计展示','业主真实装修体验与口碑分享','贵开店分红仪式','装修交付后的售后回访','水城店门店形象及服务介绍','立冬节气创意主题视频','小雪节气创意主题视频']
   const inferPlanMonth=(plan:PlanItem)=>{
     if(plan.date?.match(/^\d{4}-\d{2}/))return plan.date.slice(0,7)
@@ -377,9 +393,12 @@ function WorkPlan(){
   const [plansLoading,setPlansLoading]=useState(isSupabaseConfigured)
   const [plansError,setPlansError]=useState('')
   const [customPlans,setCustomPlans]=useState<PlanItem[]>(()=>stored('brandflow-plans',[]))
-  const [planScripts,setPlanScripts]=useState<Record<string,{id?:string;script:string}>>(()=>stored('brandflow-plan-scripts',{}))
+  const [planScripts,setPlanScripts]=useState<Record<string,PlanScript>>(()=>{
+    const saved=stored<Record<string,{id?:string;script?:string;shots?:StoryboardShot[]}>>('brandflow-plan-scripts',{})
+    return Object.fromEntries(Object.entries(saved).map(([key,value])=>[key,{...value,shots:value.shots?.length?value.shots:legacyScriptShots(value.script)}]))
+  })
   const [activeScriptPlan,setActiveScriptPlan]=useState<PlanItem|null>(null)
-  const [scriptDraft,setScriptDraft]=useState('')
+  const [storyboardDraft,setStoryboardDraft]=useState<StoryboardShot[]>([])
   const [savingScript,setSavingScript]=useState(false)
   const [pendingDeletePlan,setPendingDeletePlan]=useState<PlanItem|null>(null)
   const [deletingPlan,setDeletingPlan]=useState(false)
@@ -392,11 +411,15 @@ function WorkPlan(){
       try{
         let rows:any=await plansDb.list()
         if(!rows.length&&localStorage.getItem('brandflow-plan-seed-ready')!=='true')rows=await ensureNovember2026Plans()
-        const scriptRows:any[]=await contentsDb.listPlanScripts()
+        const [scriptRows,shotRows]:any=await Promise.all([contentsDb.listPlanScripts(),contentsDb.listPlanStoryboardShots()])
         localStorage.setItem('brandflow-plan-seed-ready','true')
         if(active){
           setCustomPlans(rows.map((row:any)=>({id:row.id,title:row.title,summary:row.summary,brand:row.brands?.name,period:row.period,date:row.due_date||'',status:row.status})))
-          setPlanScripts(scriptRows.reduce((result,row)=>row.plan_id?({...result,[row.plan_id]:{id:row.id,script:row.summary||''}}):result,{}))
+          const shotsByContent=shotRows.reduce((result:Record<string,StoryboardShot[]>,row:any)=>{
+            const shot:StoryboardShot={shotNumber:row.shot_number||'',shotContent:row.shot_content||'',shotTypeMovement:row.shot_type_movement||'',visualDescription:row.visual_description||'',dialogueSubtitle:row.dialogue_subtitle||'',duration:row.duration||'',notes:row.notes||''}
+            return {...result,[row.content_id]:[...(result[row.content_id]||[]),shot]}
+          },{})
+          setPlanScripts(scriptRows.reduce((result:Record<string,PlanScript>,row:any)=>row.plan_id?({...result,[row.plan_id]:{id:row.id,script:row.summary||'',shots:shotsByContent[row.id]?.length?shotsByContent[row.id]:storedScriptShots(row.summary)}}):result,{}))
         }
       }catch(error){
         if(active)setPlansError(error instanceof Error?error.message:'工作计划加载失败，请稍后重试。')
@@ -420,7 +443,7 @@ function WorkPlan(){
   const planDate=(date:string)=>date?`${Number(date.slice(5,7))}月${Number(date.slice(8))}日`:'待定'
   const planStatus=(plan:PlanItem)=>(plan.status||'待开始').replace(/^\d{4}-\d{2}月计划·/,'').replace('11月计划·','')
   const planScriptKey=(plan:PlanItem)=>plan.id||`${plan.brand||'brand'}:${plan.title}`
-  const planScript=(plan:PlanItem)=>planScripts[planScriptKey(plan)]?.script||''
+  const planScript=(plan:PlanItem)=>planScripts[planScriptKey(plan)]
   const activeMonthLabel=selectedMonth?monthLabel(selectedMonth):''
   const monthEnd=selectedMonth?String(new Date(Number(selectedMonth.slice(0,4)),Number(selectedMonth.slice(5,7)),0).getDate()).padStart(2,'0'):'01'
   const dateMin=selectedMonth?`${selectedMonth}-01`:''
@@ -469,9 +492,13 @@ function WorkPlan(){
   }
   const openPlanScript=(plan:PlanItem)=>{
     setActiveScriptPlan(plan)
-    setScriptDraft(planScript(plan))
+    const saved=planScript(plan)
+    setStoryboardDraft(saved?.shots?.length?saved.shots.map(shot=>({...shot})):plan.title.includes('装修完工实景及空间设计展示')?exampleShots.map(shot=>({...shot})):[blankShot('01')])
     setPlansError('')
   }
+  const updateStoryboardShot=(index:number,field:keyof StoryboardShot,value:string)=>setStoryboardDraft(current=>current.map((shot,shotIndex)=>shotIndex===index?{...shot,[field]:value}:shot))
+  const addStoryboardShot=()=>setStoryboardDraft(current=>[...current,blankShot(String(current.length+1).padStart(2,'0'))])
+  const removeStoryboardShot=(index:number)=>setStoryboardDraft(current=>current.length===1?current:current.filter((_,shotIndex)=>shotIndex!==index))
   const savePlanScript=async(event:React.FormEvent)=>{
     event.preventDefault()
     if(!activeScriptPlan)return
@@ -485,12 +512,12 @@ function WorkPlan(){
           planId:activeScriptPlan.id,
           brandCode:activeScriptPlan.brand==='喜客喜装饰'?'brandB':'brandA',
           title:activeScriptPlan.title,
-          script:scriptDraft,
+          shots:storyboardDraft,
           publishDate:activeScriptPlan.date||null,
         })
         rowId=row.id
       }
-      setPlanScripts(current=>({...current,[key]:{id:rowId,script:scriptDraft}}))
+      setPlanScripts(current=>({...current,[key]:{id:rowId,shots:storyboardDraft.map(shot=>({...shot}))}}))
       setActiveScriptPlan(null)
     }catch(error){
       setPlansError(error instanceof Error?error.message:'脚本保存失败，请稍后重试。')
@@ -540,7 +567,7 @@ function WorkPlan(){
         {overallPanel}
       </motion.div>:<motion.div key="week" variants={gridMotion} initial="hidden" animate="show" exit={{opacity:0,y:-8}} className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">{weekGroups.map(([name,items],index)=><Card key={name} className="min-h-[430px] bg-white/75 p-4"><div className="flex items-center justify-between px-1 py-2"><h2 className="flex items-center gap-2 font-semibold"><i className={`size-2 rounded-full ${index===0?'bg-slate-300':index===1?'bg-sky-400':index===2?'bg-amber-400':'bg-[#8dcc65]'}`}/>{name}</h2><span className="rounded-full bg-[#f2f6ef] px-2 py-1 text-xs text-slate-500">{items.length}</span></div><div className="mt-3 space-y-3">{items.map((item,i)=><motion.article whileHover={{y:-3}} key={item} className="rounded-2xl border border-slate-100 bg-white p-4 shadow-sm"><span className="text-xs font-semibold text-[#67a756]">{i%2?'内容运营':'品牌项目'}</span><h3 className="mt-2 text-base font-semibold leading-7">{item}</h3><div className="mt-5 flex items-center justify-between text-sm text-slate-500"><span className="grid size-7 place-items-center rounded-full bg-[#e5f3dd] font-bold text-[#5d8d52]">{i%2?'文':'设'}</span><time>本周{index+i+1}日</time></div></motion.article>)}</div></Card>)}</motion.div>}
     </AnimatePresence>
-    <CreatePanel open={Boolean(activeScriptPlan)} onClose={()=>!savingScript&&setActiveScriptPlan(null)} title={activeScriptPlan?`${activeScriptPlan.title} · 编导脚本`:'编导脚本'} desc={activeScriptPlan?`${activeScriptPlan.brand} · ${activeScriptPlan.summary||'视频栏目'} · ${planDate(activeScriptPlan.date)}。可按镜头顺序编写画面、旁白、同期声和备注。`:'为月度视频计划编写执行脚本。'}><form onSubmit={savePlanScript} className="space-y-4"><label className="block text-sm font-medium text-slate-600">脚本内容<textarea autoFocus value={scriptDraft} onChange={event=>setScriptDraft(event.target.value)} className="mt-2 min-h-[48vh] w-full resize-y rounded-2xl border border-slate-100 bg-[#f8faf7] p-4 text-sm leading-7 text-slate-700 outline-none transition focus:border-emerald-200 focus:ring-4 focus:ring-emerald-50" placeholder={`镜头 1｜画面：\n旁白 / 对白：\n\n镜头 2｜画面：\n旁白 / 对白：\n\n结尾｜品牌信息 / 行动引导：`}/></label>{plansError&&<p className="rounded-2xl bg-rose-50 px-4 py-3 text-sm leading-6 text-rose-600">{plansError}</p>}<SubmitButton label={savingScript?'正在保存...':'保存编导脚本'} icon={<CheckCircle2 size={17}/>}/></form></CreatePanel>
+    <CreatePanel wide open={Boolean(activeScriptPlan)} onClose={()=>!savingScript&&setActiveScriptPlan(null)} title={activeScriptPlan?`${activeScriptPlan.title} · 编导脚本`:'编导脚本'} desc={activeScriptPlan?`${activeScriptPlan.brand} · ${activeScriptPlan.summary||'视频栏目'} · ${planDate(activeScriptPlan.date)}。每一列都是独立字段，可逐行新增、修改或删除镜头。`:'为月度视频计划编写执行脚本。'}><form onSubmit={savePlanScript} className="space-y-5"><div className="overflow-x-auto rounded-2xl border border-slate-100"><table className="w-full min-w-[1120px] table-fixed text-left"><thead className="bg-[#f2f8ef] text-xs font-semibold text-[#4f8248]"><tr><th className="w-[84px] px-3 py-3">镜头编号</th><th className="w-[142px] px-3 py-3">镜头内容</th><th className="w-[142px] px-3 py-3">景别/运镜</th><th className="w-[205px] px-3 py-3">画面描述</th><th className="w-[205px] px-3 py-3">台词/字幕</th><th className="w-[82px] px-3 py-3">时长</th><th className="w-[154px] px-3 py-3">备注</th><th className="w-[56px] px-2 py-3 text-center">操作</th></tr></thead><tbody>{storyboardDraft.map((shot,index)=><tr key={`storyboard-shot-${index}`} className="border-t border-slate-100 align-top"><td className="p-2"><input autoFocus={index===0} required aria-label={`第${index+1}行镜头编号`} value={shot.shotNumber} onChange={event=>updateStoryboardShot(index,'shotNumber',event.target.value)} className="h-11 w-full rounded-xl border border-slate-100 bg-[#fafcf9] px-3 text-sm font-semibold outline-none transition focus:border-emerald-200 focus:ring-4 focus:ring-emerald-50" placeholder="01"/></td><td className="p-2"><textarea required aria-label={`第${index+1}行镜头内容`} value={shot.shotContent} onChange={event=>updateStoryboardShot(index,'shotContent',event.target.value)} className="min-h-20 w-full resize-none rounded-xl border border-slate-100 bg-[#fafcf9] p-3 text-sm leading-6 outline-none transition focus:border-emerald-200 focus:ring-4 focus:ring-emerald-50" placeholder="开场展示"/></td><td className="p-2"><textarea aria-label={`第${index+1}行景别运镜`} value={shot.shotTypeMovement} onChange={event=>updateStoryboardShot(index,'shotTypeMovement',event.target.value)} className="min-h-20 w-full resize-none rounded-xl border border-slate-100 bg-[#fafcf9] p-3 text-sm leading-6 outline-none transition focus:border-emerald-200 focus:ring-4 focus:ring-emerald-50" placeholder="全景/推进"/></td><td className="p-2"><textarea aria-label={`第${index+1}行画面描述`} value={shot.visualDescription} onChange={event=>updateStoryboardShot(index,'visualDescription',event.target.value)} className="min-h-20 w-full resize-none rounded-xl border border-slate-100 bg-[#fafcf9] p-3 text-sm leading-6 outline-none transition focus:border-emerald-200 focus:ring-4 focus:ring-emerald-50" placeholder="描述画面主体、动作与环境"/></td><td className="p-2"><textarea aria-label={`第${index+1}行台词字幕`} value={shot.dialogueSubtitle} onChange={event=>updateStoryboardShot(index,'dialogueSubtitle',event.target.value)} className="min-h-20 w-full resize-none rounded-xl border border-slate-100 bg-[#fafcf9] p-3 text-sm leading-6 outline-none transition focus:border-emerald-200 focus:ring-4 focus:ring-emerald-50" placeholder="旁白、人物台词或字幕"/></td><td className="p-2"><input aria-label={`第${index+1}行时长`} value={shot.duration} onChange={event=>updateStoryboardShot(index,'duration',event.target.value)} className="h-11 w-full rounded-xl border border-slate-100 bg-[#fafcf9] px-3 text-sm outline-none transition focus:border-emerald-200 focus:ring-4 focus:ring-emerald-50" placeholder="5秒"/></td><td className="p-2"><textarea aria-label={`第${index+1}行备注`} value={shot.notes} onChange={event=>updateStoryboardShot(index,'notes',event.target.value)} className="min-h-20 w-full resize-none rounded-xl border border-slate-100 bg-[#fafcf9] p-3 text-sm leading-6 outline-none transition focus:border-emerald-200 focus:ring-4 focus:ring-emerald-50" placeholder="稳定运镜、收音等"/></td><td className="p-2 text-center"><button type="button" disabled={storyboardDraft.length===1} onClick={()=>removeStoryboardShot(index)} title="删除这一镜" aria-label={`删除第${index+1}行镜头`} className="mx-auto grid size-10 place-items-center rounded-xl text-slate-400 transition hover:bg-rose-50 hover:text-rose-500 disabled:cursor-not-allowed disabled:opacity-25"><Trash2 size={16}/></button></td></tr>)}</tbody></table></div><div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between"><button type="button" onClick={addStoryboardShot} className="flex h-11 items-center justify-center gap-2 rounded-2xl border border-[#dcebd6] bg-[#f5faf2] px-5 text-sm font-semibold text-[#4f8248] transition hover:bg-[#edf7e9]"><Plus size={17}/>新增镜头</button><p className="text-sm text-slate-400">共 {storyboardDraft.length} 个镜头 · 横向滚动可查看全部字段</p></div>{plansError&&<p className="rounded-2xl bg-rose-50 px-4 py-3 text-sm leading-6 text-rose-600">{plansError}</p>}<SubmitButton label={savingScript?'正在保存...':'保存编导脚本'} icon={<CheckCircle2 size={17}/>}/></form></CreatePanel>
     <CreatePanel open={createOpen} onClose={()=>setCreateOpen(false)} title={`新建${activeMonthLabel}视频计划`} desc="视频重点写清楚要拍什么，栏目类型和发布时间作为辅助信息。"><form onSubmit={addPlan} className="space-y-4"><Field label="视频重点 / 主题"><input required value={planForm.title} onChange={event=>setPlanForm({...planForm,title:event.target.value})} placeholder="例如：装修完工实景及空间设计展示"/></Field><label className="block text-xs font-medium text-slate-500">类型 / 视频栏目<textarea required value={planForm.summary} onChange={event=>setPlanForm({...planForm,summary:event.target.value})} className="mt-2 min-h-24 w-full resize-none rounded-2xl border border-slate-100 bg-[#f8faf7] p-4 text-sm outline-none transition focus:border-emerald-200 focus:ring-4 focus:ring-emerald-50" placeholder="例如：品质交付·实景鉴赏"/></label><div className="grid gap-4 sm:grid-cols-2"><Field label="所属品牌"><select value={planForm.brand} onChange={event=>setPlanForm({...planForm,brand:event.target.value})}><option>创艺装饰</option><option>喜客喜装饰</option></select></Field><Field label="计划月份"><input value={activeMonthLabel} readOnly aria-readonly="true"/></Field></div><Field label="计划发布日期（可稍后确定）"><input type="date" min={dateMin} max={dateMax} value={planForm.date} onChange={event=>setPlanForm({...planForm,date:event.target.value})}/></Field>{plansError&&<p className="rounded-2xl bg-rose-50 px-4 py-3 text-xs leading-5 text-rose-600">{plansError}</p>}<SubmitButton label="保存并联动更新"/></form></CreatePanel>
     <ConfirmDialog open={Boolean(pendingDeletePlan)} onClose={()=>!deletingPlan&&setPendingDeletePlan(null)} onConfirm={removePlan} loading={deletingPlan} title="确认删除这条工作计划？" desc={pendingDeletePlan?`${pendingDeletePlan.brand||'未指定品牌'} · ${planDate(pendingDeletePlan.date)} · ${pendingDeletePlan.title}`:''}/>
     <DetailPanel detail={selectedPlan} onClose={()=>setSelectedPlan(null)}/>
@@ -695,8 +722,8 @@ function Field({label,children}:{label:string;children:React.ReactNode}){return 
 
 function SubmitButton({label,icon}:{label:string;icon?:React.ReactNode}){return <motion.button type="submit" whileHover={{y:-2,scale:1.01}} whileTap={{scale:.98}} className="flex h-12 w-full items-center justify-center gap-2 rounded-2xl bg-[#8dcc65] text-sm font-semibold text-white shadow-lg shadow-lime-200 transition hover:bg-[#82c45c]">{icon||<CheckCircle2 size={17}/>} {label}</motion.button>}
 
-function CreatePanel({open,onClose,title,desc,children}:{open:boolean;onClose:()=>void;title:string;desc:string;children:React.ReactNode}){
-  return <AnimatePresence>{open&&<><motion.button aria-label="关闭新增面板" initial={{opacity:0}} animate={{opacity:1}} exit={{opacity:0}} onClick={onClose} className="fixed inset-0 z-50 bg-slate-900/25 backdrop-blur-sm"/><div className="pointer-events-none fixed inset-0 z-[60] flex items-center justify-center p-3 sm:p-6"><motion.section role="dialog" aria-modal="true" aria-label={title} initial={{y:24,scale:.96,opacity:0}} animate={{y:0,scale:1,opacity:1}} exit={{y:18,scale:.97,opacity:0}} transition={{type:'spring',stiffness:260,damping:26}} className="pointer-events-auto max-h-[calc(100vh-24px)] w-full max-w-xl overflow-y-auto rounded-3xl border border-white bg-white p-5 shadow-[0_30px_90px_rgba(31,52,40,0.24)] sm:p-7"><div className="flex items-start justify-between gap-4"><div><p className="text-xs font-semibold uppercase tracking-[.14em] text-[#67a756]">Create New</p><h2 className="mt-2 text-2xl font-semibold">{title}</h2><p className="mt-2 text-sm leading-6 text-slate-400">{desc}</p></div><button type="button" onClick={onClose} title="关闭" className="grid size-10 shrink-0 place-items-center rounded-2xl bg-[#f4f7f2] text-slate-500 transition hover:bg-slate-100"><X size={18}/></button></div><div className="mt-7">{children}</div></motion.section></div></>}</AnimatePresence>
+function CreatePanel({open,onClose,title,desc,children,wide=false}:{open:boolean;onClose:()=>void;title:string;desc:string;children:React.ReactNode;wide?:boolean}){
+  return <AnimatePresence>{open&&<><motion.button aria-label="关闭新增面板" initial={{opacity:0}} animate={{opacity:1}} exit={{opacity:0}} onClick={onClose} className="fixed inset-0 z-50 bg-slate-900/25 backdrop-blur-sm"/><div className="pointer-events-none fixed inset-0 z-[60] flex items-center justify-center p-3 sm:p-6"><motion.section role="dialog" aria-modal="true" aria-label={title} initial={{y:24,scale:.96,opacity:0}} animate={{y:0,scale:1,opacity:1}} exit={{y:18,scale:.97,opacity:0}} transition={{type:'spring',stiffness:260,damping:26}} className={`pointer-events-auto max-h-[calc(100vh-24px)] w-full overflow-y-auto rounded-3xl border border-white bg-white p-5 shadow-[0_30px_90px_rgba(31,52,40,0.24)] sm:p-7 ${wide?'max-w-[1400px]':'max-w-xl'}`}><div className="flex items-start justify-between gap-4"><div><p className="text-xs font-semibold uppercase tracking-[.14em] text-[#67a756]">Create New</p><h2 className="mt-2 text-2xl font-semibold">{title}</h2><p className="mt-2 text-sm leading-6 text-slate-400">{desc}</p></div><button type="button" onClick={onClose} title="关闭" className="grid size-10 shrink-0 place-items-center rounded-2xl bg-[#f4f7f2] text-slate-500 transition hover:bg-slate-100"><X size={18}/></button></div><div className="mt-7">{children}</div></motion.section></div></>}</AnimatePresence>
 }
 
 type DetailData = {

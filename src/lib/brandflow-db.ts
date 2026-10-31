@@ -58,6 +58,10 @@ function assertData<T>(data: T | null, error: { message: string } | null): T {
   return data
 }
 
+function isMissingStoryboardTable(error: { code?: string; message?: string } | null) {
+  return Boolean(error && (error.code === '42P01' || error.code === 'PGRST205' || error.message?.includes('storyboard_shots')))
+}
+
 export async function bootstrapBrandFlow() {
   const client = requireSupabase()
   const core = await client.rpc('bootstrap_brandflow')
@@ -298,11 +302,34 @@ export const contentsDb = {
     const { data, error } = await client.from('contents').select('id,plan_id,title,summary,channel,brands(code,name)').eq('channel', '编导脚本').not('plan_id', 'is', null)
     return assertData(data, error)
   },
+  listPlanStoryboardShots: async () => {
+    const client = requireSupabase()
+    const { data, error } = await client
+      .from('storyboard_shots')
+      .select('id,content_id,shot_number,shot_content,shot_type_movement,visual_description,dialogue_subtitle,duration,notes,sort_order')
+      .order('sort_order', { ascending: true })
+    if (isMissingStoryboardTable(error)) return []
+    return assertData(data, error)
+  },
   create: async (input: OwnedInsert & { brandCode?: BrandCode }) => {
     const { brandCode, ...row } = input
     return insertOwned('contents', { ...row, brand_id: await resolveBrandId(brandCode) })
   },
-  savePlanScript: async (input: { planId: string; brandCode: BrandCode; title: string; script: string; publishDate?: string | null }) => {
+  savePlanScript: async (input: {
+    planId: string
+    brandCode: BrandCode
+    title: string
+    shots: Array<{
+      shotNumber: string
+      shotContent: string
+      shotTypeMovement: string
+      visualDescription: string
+      dialogueSubtitle: string
+      duration: string
+      notes: string
+    }>
+    publishDate?: string | null
+  }) => {
     const client = requireSupabase()
     const ownerId = await currentUserId()
     const brandId = await resolveBrandId(input.brandCode)
@@ -313,7 +340,7 @@ export const contentsDb = {
       brand_id: brandId,
       plan_id: input.planId,
       title: input.title,
-      summary: input.script,
+      summary: JSON.stringify({ version: 1, shots: input.shots }),
       content_format: '短视频',
       channel: '编导脚本',
       status: '脚本中',
@@ -322,7 +349,27 @@ export const contentsDb = {
     const result = existing
       ? await client.from('contents').update(row).eq('id', existing.id).eq('owner_id', ownerId).select('*').single()
       : await client.from('contents').insert(row).select('*').single()
-    return assertData(result.data, result.error)
+    const content = assertData(result.data, result.error)
+    const shotRows = input.shots.map((shot, sortOrder) => ({
+      owner_id: ownerId,
+      content_id: content.id,
+      shot_number: shot.shotNumber,
+      shot_content: shot.shotContent,
+      shot_type_movement: shot.shotTypeMovement,
+      visual_description: shot.visualDescription,
+      dialogue_subtitle: shot.dialogueSubtitle,
+      duration: shot.duration,
+      notes: shot.notes,
+      sort_order: sortOrder,
+    }))
+    if (shotRows.length) {
+      const { error: saveShotsError } = await client.from('storyboard_shots').upsert(shotRows, { onConflict: 'content_id,sort_order' })
+      if (saveShotsError && !isMissingStoryboardTable(saveShotsError)) throw saveShotsError
+      if (saveShotsError) return content
+      const { error: removeExtraError } = await client.from('storyboard_shots').delete().eq('owner_id', ownerId).eq('content_id', content.id).gte('sort_order', shotRows.length)
+      if (removeExtraError && !isMissingStoryboardTable(removeExtraError)) throw removeExtraError
+    }
+    return content
   },
 }
 

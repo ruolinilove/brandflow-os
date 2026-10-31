@@ -76,6 +76,7 @@ VITE_AMAP_SECURITY_CODE=your-amap-security-code
 11. `supabase/migrations/202607280005_aquarium.sql`
 12. `supabase/migrations/202607280006_expand_farm_plots.sql`
 13. `supabase/migrations/202607280007_ranch.sql`
+14. `supabase/migrations/202610310001_storyboard_shots.sql`
 
 这些迁移会创建业务表、模块初始化函数、私有素材桶和邀请制访问策略。
 
