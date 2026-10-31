@@ -1,6 +1,9 @@
 import { useEffect, useMemo, useRef } from 'react'
 import * as THREE from 'three'
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js'
+import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js'
+import { MeshoptDecoder } from 'three/examples/jsm/libs/meshopt_decoder.module.js'
+import { clone as cloneSkeleton } from 'three/examples/jsm/utils/SkeletonUtils.js'
 import type { AquariumCreature, AquariumManifest } from './aquarium-types'
 
 type Props = {
@@ -14,8 +17,10 @@ type Props = {
 type Rig = {
   id: string
   root: THREE.Group
+  visual: THREE.Object3D
   tail: THREE.Object3D | null
   fins: THREE.Object3D[]
+  mixer: THREE.AnimationMixer | null
   base: THREE.Vector3
   phase: number
   speed: number
@@ -214,6 +219,38 @@ function environment(scene: THREE.Scene) {
   return { water, plants, bubbles, basePositions: positions.slice() }
 }
 
+function disposeObject(root: THREE.Object3D) {
+  root.traverse(object => {
+    if (!(object instanceof THREE.Mesh)) return
+    object.geometry?.dispose()
+    ;(Array.isArray(object.material) ? object.material : [object.material]).forEach(surface => surface?.dispose())
+  })
+}
+
+function prepareRealModel(source: THREE.Object3D, targetSize: number) {
+  const model = cloneSkeleton(source)
+  model.traverse(object => {
+    if (!(object instanceof THREE.Mesh)) return
+    object.castShadow = true
+    object.receiveShadow = true
+    const surfaces = Array.isArray(object.material) ? object.material : [object.material]
+    surfaces.forEach(surface => {
+      if ('roughness' in surface) (surface as THREE.MeshStandardMaterial).roughness = Math.max(.28, (surface as THREE.MeshStandardMaterial).roughness ?? .45)
+      if ('envMapIntensity' in surface) (surface as THREE.MeshStandardMaterial).envMapIntensity = .7
+    })
+  })
+  let box = new THREE.Box3().setFromObject(model), size = new THREE.Vector3()
+  box.getSize(size)
+  if (size.z > size.x * 1.25) model.rotation.y = Math.PI / 2
+  box = new THREE.Box3().setFromObject(model); box.getSize(size)
+  const longest = Math.max(size.x, size.y, size.z) || 1
+  model.scale.multiplyScalar(targetSize / longest)
+  box = new THREE.Box3().setFromObject(model)
+  const center = box.getCenter(new THREE.Vector3())
+  model.position.sub(center)
+  return model
+}
+
 export function AquariumScene3D({ creatures, manifest, selectedId, feedPulse, onSelect }: Props) {
   const hostRef = useRef<HTMLDivElement>(null), selectedRef = useRef(selectedId), selectRef = useRef(onSelect), feedRef = useRef<{ id: string; time: number } | null>(null)
   const signature = useMemo(() => creatures.map(creature => `${creature.id}:${creature.speciesKey}`).join('|'), [creatures])
@@ -229,7 +266,36 @@ export function AquariumScene3D({ creatures, manifest, selectedId, feedPulse, on
     const controls = new OrbitControls(camera, renderer.domElement); controls.enableDamping = true; controls.dampingFactor = .055; controls.enablePan = false; controls.minDistance = 8.5; controls.maxDistance = 15; controls.minPolarAngle = Math.PI * .35; controls.maxPolarAngle = Math.PI * .66; controls.minAzimuthAngle = -.36; controls.maxAzimuthAngle = .36; controls.target.set(0, -.2, -.4)
     scene.add(new THREE.HemisphereLight(0x8de9f4, 0x173624, 2.05)); const sun = new THREE.DirectionalLight(0xd8fbff, 3.15); sun.position.set(-4, 7, 7); sun.castShadow = true; sun.shadow.mapSize.set(1024, 1024); scene.add(sun); const fill = new THREE.PointLight(0x4bd2dc, 18, 18, 2); fill.position.set(4, 1, 3); scene.add(fill)
     const world = environment(scene), rigs: Rig[] = [], byId = new Map<string, Rig>()
-    creatures.forEach((creature, index) => { const asset = manifest.creatures[creature.speciesKey]; if (!asset) return; const model = modelFor(creature.speciesKey), bottom = asset.zone === 'bottom', size = THREE.MathUtils.clamp(asset.size / 110, .54, 1.16) * (creature.speciesKey === 'starfish' ? .62 : creature.speciesKey === 'jellyfish' ? .72 : .72); model.root.scale.setScalar(size); model.root.traverse(child => { child.userData.creatureId = creature.id }); const base = new THREE.Vector3((creature.x - .5) * 10, bottom ? -2.55 : (.5 - creature.y) * 5.15, -2.15 + index % 6 * .62); model.root.position.copy(base); scene.add(model.root); const rig = { id: creature.id, root: model.root, tail: model.tail, fins: model.fins, base, phase: index * 1.47, speed: .16 + asset.speed / 95, range: bottom ? .12 : .55 + asset.speed / 100, bottom, size }; rigs.push(rig); byId.set(creature.id, rig) })
+    const creatureById = new Map(creatures.map(creature => [creature.id, creature]))
+    creatures.forEach((creature, index) => {
+      const asset = manifest.creatures[creature.speciesKey]; if (!asset) return
+      const model = modelFor(creature.speciesKey), container = new THREE.Group(), bottom = asset.zone === 'bottom'
+      const size = THREE.MathUtils.clamp(asset.size / 110, .54, 1.16) * (creature.speciesKey === 'starfish' ? .62 : creature.speciesKey === 'jellyfish' ? .72 : .72)
+      model.root.scale.setScalar(size); model.root.traverse(child => { child.userData.creatureId = creature.id }); container.userData.creatureId = creature.id; container.add(model.root)
+      const base = new THREE.Vector3((creature.x - .5) * 10, bottom ? -2.55 : (.5 - creature.y) * 5.15, -2.15 + index % 6 * .62)
+      container.position.copy(base); scene.add(container)
+      const rig: Rig = { id: creature.id, root: container, visual: model.root, tail: model.tail, fins: model.fins, mixer: null, base, phase: index * 1.47, speed: .16 + asset.speed / 95, range: bottom ? .12 : .55 + asset.speed / 100, bottom, size }
+      rigs.push(rig); byId.set(creature.id, rig)
+    })
+    let stopped = false
+    const loader = new GLTFLoader(); loader.setMeshoptDecoder(MeshoptDecoder)
+    const modelBase = `${import.meta.env.BASE_URL}assets/aquarium/models/`
+    Promise.all([
+      loader.loadAsync(`${modelBase}grey-snapper-meshopt.glb`),
+      loader.loadAsync(`${modelBase}shark-meshopt.glb`),
+      loader.loadAsync(`${modelBase}octopus-meshopt.glb`),
+    ]).then(([fishModel, sharkModel, octopusModel]) => {
+      if (stopped) return
+      rigs.forEach(rig => {
+        const species = creatureById.get(rig.id)?.speciesKey
+        const source = species === 'reefShark' ? sharkModel : species === 'octopus' ? octopusModel : ['clownfish', 'blueTang', 'angelfish', 'butterflyfish'].includes(species || '') ? fishModel : null
+        if (!source) return
+        const real = prepareRealModel(source.scene, species === 'reefShark' ? 3.2 : species === 'octopus' ? 2.15 : 1.72)
+        real.traverse(child => { child.userData.creatureId = rig.id })
+        rig.root.remove(rig.visual); disposeObject(rig.visual); rig.visual = real; rig.root.add(real); rig.tail = null; rig.fins = []
+        if (source.animations.length) { rig.mixer = new THREE.AnimationMixer(real); source.animations.forEach(clip => rig.mixer?.clipAction(clip).play()) }
+      })
+    }).catch(error => console.warn('真实海洋生物模型加载失败，已保留轻量模型。', error))
     const halo = addMesh(new THREE.RingGeometry(.82, .9, 64), new THREE.MeshBasicMaterial({ color: 0xffdf78, transparent: true, opacity: .82, side: THREE.DoubleSide, depthWrite: false, blending: THREE.AdditiveBlending }), scene); halo.visible = false
     const feedGlow = addMesh(new THREE.RingGeometry(.55, .68, 48), new THREE.MeshBasicMaterial({ color: 0x71ffd1, transparent: true, opacity: .8, side: THREE.DoubleSide, depthWrite: false, blending: THREE.AdditiveBlending }), scene); feedGlow.visible = false
     const raycaster = new THREE.Raycaster(), pointer = new THREE.Vector2(); let start = { x: 0, y: 0 }
@@ -237,15 +303,15 @@ export function AquariumScene3D({ creatures, manifest, selectedId, feedPulse, on
     const up = (event: PointerEvent) => { if (Math.hypot(event.clientX - start.x, event.clientY - start.y) > 6) return; const rect = renderer.domElement.getBoundingClientRect(); pointer.set((event.clientX - rect.left) / rect.width * 2 - 1, -((event.clientY - rect.top) / rect.height) * 2 + 1); raycaster.setFromCamera(pointer, camera); const hit = raycaster.intersectObjects(rigs.map(rig => rig.root), true)[0]; if (!hit) return; let object: THREE.Object3D | null = hit.object; while (object && !object.userData.creatureId) object = object.parent; if (object?.userData.creatureId) selectRef.current(object.userData.creatureId) }
     renderer.domElement.addEventListener('pointerdown', down); renderer.domElement.addEventListener('pointerup', up)
     const resize = () => { const rect = host.getBoundingClientRect(); renderer.setSize(Math.max(1, rect.width), Math.max(1, rect.height), false); camera.aspect = Math.max(1, rect.width) / Math.max(1, rect.height); camera.updateProjectionMatrix() }
-    const observer = new ResizeObserver(resize); observer.observe(host); resize(); const startedAt = performance.now(); let frame = 0
-    const animate = () => { const time = (performance.now() - startedAt) / 1000; world.water.uniforms.time.value = time
-      rigs.forEach(rig => { const travel = time * rig.speed + rig.phase, direction = Math.cos(travel) >= 0 ? 1 : -1; rig.root.position.x = rig.base.x + Math.sin(travel) * rig.range; rig.root.position.y = rig.base.y + (rig.bottom ? Math.sin(travel * .7) * .025 : Math.sin(travel * 1.33) * (.14 + rig.range * .08)); rig.root.position.z = rig.base.z + Math.cos(travel * .62) * .34; rig.root.rotation.y = direction > 0 ? 0 : Math.PI; rig.root.rotation.z = rig.bottom ? 0 : Math.cos(travel * 1.25) * .035; if (rig.tail) rig.tail.rotation.y = Math.sin(time * 4.8 + rig.phase) * .22; rig.fins.forEach((fin, index) => { fin.rotation.z += Math.sin(time * 2.1 + rig.phase + index) * .0018 }) })
+    const observer = new ResizeObserver(resize); observer.observe(host); resize(); const startedAt = performance.now(); let previousTime = 0, frame = 0
+    const animate = () => { const time = (performance.now() - startedAt) / 1000, delta = Math.min(.05, time - previousTime); previousTime = time; world.water.uniforms.time.value = time
+      rigs.forEach(rig => { rig.mixer?.update(delta); const travel = time * rig.speed + rig.phase, direction = Math.cos(travel) >= 0 ? 1 : -1; rig.root.position.x = rig.base.x + Math.sin(travel) * rig.range; rig.root.position.y = rig.base.y + (rig.bottom ? Math.sin(travel * .7) * .025 : Math.sin(travel * 1.33) * (.14 + rig.range * .08)); rig.root.position.z = rig.base.z + Math.cos(travel * .62) * .34; rig.root.rotation.y = direction > 0 ? 0 : Math.PI; rig.root.rotation.z = rig.bottom ? 0 : Math.cos(travel * 1.25) * .035; if (rig.tail) rig.tail.rotation.y = Math.sin(time * 4.8 + rig.phase) * .22; rig.fins.forEach((fin, index) => { fin.rotation.z += Math.sin(time * 2.1 + rig.phase + index) * .0018 }) })
       world.plants.forEach((plant, index) => { plant.rotation.z = Math.sin(time * .72 + index) * .055 }); const attribute = world.bubbles.geometry.getAttribute('position') as THREE.BufferAttribute; for (let index = 0; index < attribute.count; index++) { let y = attribute.getY(index) + .006 + index % 5 * .0012; if (y > 4) y = -3; attribute.setY(index, y); attribute.setX(index, world.basePositions[index * 3] + Math.sin(time * .5 + index) * .035) } attribute.needsUpdate = true
       const selected = selectedRef.current ? byId.get(selectedRef.current) : null; if (selected) { halo.visible = true; halo.position.copy(selected.root.position); halo.quaternion.copy(camera.quaternion); halo.scale.setScalar(selected.size * 1.35 * (1 + Math.sin(time * 3.4) * .08)) } else halo.visible = false
       const effect = feedRef.current; if (effect && performance.now() - effect.time < 1250) { const rig = byId.get(effect.id); if (rig) { const progress = (performance.now() - effect.time) / 1250; feedGlow.visible = true; feedGlow.position.copy(rig.root.position); feedGlow.quaternion.copy(camera.quaternion); feedGlow.scale.setScalar(.8 + progress * 2.5); (feedGlow.material as THREE.MeshBasicMaterial).opacity = (1 - progress) * .8 } } else feedGlow.visible = false
       controls.update(); renderer.render(scene, camera); frame = requestAnimationFrame(animate) }
     frame = requestAnimationFrame(animate)
-    return () => { cancelAnimationFrame(frame); observer.disconnect(); renderer.domElement.removeEventListener('pointerdown', down); renderer.domElement.removeEventListener('pointerup', up); controls.dispose(); scene.traverse(object => { if (object instanceof THREE.Mesh || object instanceof THREE.Points) { object.geometry?.dispose(); (Array.isArray(object.material) ? object.material : [object.material]).forEach(surface => surface?.dispose()) } }); renderer.dispose(); renderer.domElement.remove() }
+    return () => { stopped = true; cancelAnimationFrame(frame); observer.disconnect(); renderer.domElement.removeEventListener('pointerdown', down); renderer.domElement.removeEventListener('pointerup', up); controls.dispose(); scene.traverse(object => { if (object instanceof THREE.Mesh || object instanceof THREE.Points) { object.geometry?.dispose(); (Array.isArray(object.material) ? object.material : [object.material]).forEach(surface => surface?.dispose()) } }); renderer.dispose(); renderer.domElement.remove() }
   }, [manifest, signature])
   return <div ref={hostRef} className="relative h-[420px] w-full touch-none select-none overflow-hidden bg-[#032a3f] sm:aspect-[5/3] sm:h-auto" role="application" aria-label="可旋转查看的三维海洋馆，点击生物可以查看名称、状态并喂食"><div className="pointer-events-none absolute bottom-3 right-3 z-10 rounded-full border border-white/20 bg-slate-950/30 px-3 py-1.5 text-[10px] font-medium text-white/75 backdrop-blur">拖动旋转 · 滚轮缩放 · 点击生物</div></div>
 }
