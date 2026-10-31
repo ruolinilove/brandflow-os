@@ -251,6 +251,12 @@ export const plansDb = {
     if (error) throw error
     if (!data?.length) throw new Error('没有删除任何计划，请刷新页面后重试。')
   },
+  updateStatus: async (id: string, status: string) => {
+    const client = requireSupabase()
+    const ownerId = await currentUserId()
+    const { data, error } = await client.from('plans').update({ status }).eq('id', id).eq('owner_id', ownerId).select('id,status').single()
+    return assertData(data, error)
+  },
 }
 
 const november2026PlanSeed = [

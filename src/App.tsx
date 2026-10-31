@@ -354,6 +354,7 @@ function RecentTable({entries,brands}:{entries:MetricEntry[];brands:BrandConfig}
 
 function WorkPlan(){
   type PlanItem={id?:string;title:string;summary?:string;brand?:string;period:string;date:string;status?:string}
+  type ProductionStatus='未开始'|'正在制作'|'已完成'
   type StoryboardShot={shotNumber:string;shotContent:string;shotTypeMovement:string;visualDescription:string;dialogueSubtitle:string;duration:string;notes:string}
   type PlanScript={id?:string;script?:string;shots:StoryboardShot[]}
   const blankShot=(shotNumber='01'):StoryboardShot=>({shotNumber,shotContent:'',shotTypeMovement:'',visualDescription:'',dialogueSubtitle:'',duration:'',notes:''})
@@ -402,6 +403,7 @@ function WorkPlan(){
   const [savingScript,setSavingScript]=useState(false)
   const [pendingDeletePlan,setPendingDeletePlan]=useState<PlanItem|null>(null)
   const [deletingPlan,setDeletingPlan]=useState(false)
+  const [updatingStatusKey,setUpdatingStatusKey]=useState('')
 
   useEffect(()=>{
     if(!isSupabaseConfigured)return
@@ -441,7 +443,13 @@ function WorkPlan(){
   const activePlans=selectedMonth?monthPlans(selectedMonth):[]
   const brandPlans=(brand:string)=>activePlans.filter(plan=>plan.brand===brand).sort((a,b)=>(a.date||'9999-12-31').localeCompare(b.date||'9999-12-31'))
   const planDate=(date:string)=>date?`${Number(date.slice(5,7))}月${Number(date.slice(8))}日`:'待定'
-  const planStatus=(plan:PlanItem)=>(plan.status||'待开始').replace(/^\d{4}-\d{2}月计划·/,'').replace('11月计划·','')
+  const planStatus=(plan:PlanItem):ProductionStatus=>{
+    const value=(plan.status||'未开始').replace(/^\d{4}-\d{2}月计划·/,'').replace('11月计划·','')
+    if(value==='已完成'||value==='做完了')return '已完成'
+    if(value==='正在制作'||value==='正在做'||value==='进行中')return '正在制作'
+    return '未开始'
+  }
+  const statusStyle=(status:ProductionStatus)=>status==='已完成'?'border-emerald-100 bg-emerald-50 text-emerald-700':status==='正在制作'?'border-sky-100 bg-sky-50 text-sky-700':'border-slate-100 bg-slate-50 text-slate-500'
   const planScriptKey=(plan:PlanItem)=>plan.id||`${plan.brand||'brand'}:${plan.title}`
   const planScript=(plan:PlanItem)=>planScripts[planScriptKey(plan)]
   const activeMonthLabel=selectedMonth?monthLabel(selectedMonth):''
@@ -463,7 +471,7 @@ function WorkPlan(){
     event.preventDefault()
     if(!selectedMonth)return
     setPlansError('')
-    const item:PlanItem={...planForm,period:'month',status:`${selectedMonth}月计划·待开始`}
+    const item:PlanItem={...planForm,period:'month',status:`${selectedMonth}月计划·未开始`}
     try{
       if(isSupabaseConfigured){
         const row:any=await plansDb.create({brandCode:planForm.brand==='喜客喜装饰'?'brandB':'brandA',title:planForm.title,summary:planForm.summary,period:'month',due_date:planForm.date||null,status:item.status})
@@ -489,6 +497,28 @@ function WorkPlan(){
     }finally{
       setDeletingPlan(false)
     }
+  }
+  const updatePlanStatus=async(plan:PlanItem,nextStatus:ProductionStatus)=>{
+    const key=planScriptKey(plan)
+    if(planStatus(plan)===nextStatus)return
+    setUpdatingStatusKey(key);setPlansError('')
+    const month=inferPlanMonth(plan)||selectedMonth
+    const storedStatus=month?`${month}月计划·${nextStatus}`:nextStatus
+    try{
+      if(isSupabaseConfigured){
+        if(!plan.id)throw new Error('这条计划还没有保存到数据库，请刷新页面后重试。')
+        await plansDb.updateStatus(plan.id,storedStatus)
+      }
+      setCustomPlans(current=>current.map(item=>(plan.id&&item.id===plan.id)||item===plan?{...item,status:storedStatus}:item))
+    }catch(error){
+      setPlansError(error instanceof Error?error.message:'制作状态更新失败，请稍后重试。')
+    }finally{
+      setUpdatingStatusKey('')
+    }
+  }
+  const statusSelect=(plan:PlanItem,compact=false)=>{
+    const status=planStatus(plan),key=planScriptKey(plan),saving=updatingStatusKey===key
+    return <label onClick={event=>event.stopPropagation()} className={`inline-flex items-center gap-1.5 rounded-xl border font-semibold transition ${statusStyle(status)} ${compact?'px-2 py-1 text-xs':'px-3 py-2 text-sm'}`}><CircleDashed size={compact?13:14}/><select aria-label={`${plan.title}制作状态`} value={status} disabled={saving} onChange={event=>updatePlanStatus(plan,event.target.value as ProductionStatus)} className="cursor-pointer appearance-none bg-transparent pr-1 outline-none disabled:cursor-wait"><option value="未开始">未开始</option><option value="正在制作">正在制作</option><option value="已完成">已完成</option></select>{saving&&<span className="animate-pulse">···</span>}</label>
   }
   const openPlanScript=(plan:PlanItem)=>{
     setActiveScriptPlan(plan)
@@ -526,7 +556,7 @@ function WorkPlan(){
     }
   }
 
-  const planCard=(plan:PlanItem)=><Card key={plan.id||`${plan.brand}-${plan.title}`} onClick={()=>openPlanScript(plan)} ariaLabel={`打开 ${plan.title} 的编导脚本`} className="p-5"><div className="flex flex-wrap items-center gap-2"><span className={`rounded-full px-3 py-1 text-sm font-semibold ${plan.date?'bg-slate-50 text-slate-500':'bg-amber-50 text-amber-600'}`}>时间 · {planDate(plan.date)}</span><span className="rounded-full bg-[#edf7e9] px-3 py-1 text-sm font-semibold text-[#4f8248]">类型 · {plan.summary||'视频计划'} <ArrowUpRight size={14} className="ml-1 inline"/></span></div><p className="mt-5 text-sm font-semibold uppercase tracking-[.14em] text-[#67a756]">本条视频重点</p><h3 className="mt-2 text-xl font-semibold leading-8 text-slate-900">{plan.title}</h3><div className="mt-5 flex items-center justify-between border-t border-slate-100 pt-4 text-sm"><span className="text-slate-500">{plan.brand}</span><div className="flex items-center gap-2"><span className="flex items-center gap-1.5 font-medium text-[#67a756]"><CircleDashed size={14}/>{planStatus(plan)}</span><button onClick={event=>{event.stopPropagation();setPendingDeletePlan(plan)}} aria-label={`删除计划 ${plan.title}`} className="grid size-8 place-items-center rounded-xl text-slate-400 transition hover:bg-rose-50 hover:text-rose-500"><Trash2 size={15}/></button></div></div><p className="mt-3 text-sm text-[#5e9950]">点击打开编导脚本，可新增或修改 <ArrowUpRight size={14} className="ml-1 inline"/></p></Card>
+  const planCard=(plan:PlanItem)=><Card key={plan.id||`${plan.brand}-${plan.title}`} onClick={()=>openPlanScript(plan)} ariaLabel={`打开 ${plan.title} 的编导脚本`} className="p-5"><div className="flex flex-wrap items-center gap-2"><span className={`rounded-full px-3 py-1 text-sm font-semibold ${plan.date?'bg-slate-50 text-slate-500':'bg-amber-50 text-amber-600'}`}>时间 · {planDate(plan.date)}</span><span className="rounded-full bg-[#edf7e9] px-3 py-1 text-sm font-semibold text-[#4f8248]">类型 · {plan.summary||'视频计划'} <ArrowUpRight size={14} className="ml-1 inline"/></span></div><p className="mt-5 text-sm font-semibold uppercase tracking-[.14em] text-[#67a756]">本条视频重点</p><h3 className="mt-2 text-xl font-semibold leading-8 text-slate-900">{plan.title}</h3><div className="mt-5 flex items-center justify-between gap-3 border-t border-slate-100 pt-4"><span className="text-sm text-slate-500">{plan.brand}</span><div className="flex items-center gap-2">{statusSelect(plan)}<button onClick={event=>{event.stopPropagation();setPendingDeletePlan(plan)}} aria-label={`删除计划 ${plan.title}`} className="grid size-9 place-items-center rounded-xl text-slate-400 transition hover:bg-rose-50 hover:text-rose-500"><Trash2 size={15}/></button></div></div><p className="mt-3 text-sm text-[#5e9950]">点击卡片打开编导脚本，可新增或修改 <ArrowUpRight size={14} className="ml-1 inline"/></p></Card>
 
   const overviewBrandCard=(brand:string,index:number)=>{
     const rows=brandPlans(brand)
@@ -536,7 +566,7 @@ function WorkPlan(){
         <div className="flex items-center gap-3"><span className={`grid size-11 place-items-center rounded-2xl text-base font-black ${isChuangyi?'bg-[#dff2d6] text-[#4f8248]':'bg-[#dff2ef] text-[#43827d]'}`}>{isChuangyi?'创':'喜'}</span><div><h3 className="text-lg font-semibold">{brand}</h3><p className="mt-1 text-sm text-slate-500">{rows.length?`${rows.length}条视频制作计划`:'本月暂未安排视频'}</p></div></div>
         <span className={`rounded-full bg-white px-3 py-1.5 text-sm font-semibold ${isChuangyi?'text-[#4f8248]':'text-[#43827d]'}`}>{rows.length} 条</span>
       </div>
-      {rows.length?<><div className="hidden grid-cols-[74px_166px_minmax(0,1fr)_76px_72px] gap-3 border-b border-slate-100 bg-[#fbfcfa] px-6 py-3 text-xs font-semibold text-slate-500 sm:grid"><span>时间</span><span>类型 / 栏目</span><span>视频重点</span><span>状态</span><span className="text-right">操作</span></div><div className="divide-y divide-slate-100">{rows.map((plan,rowIndex)=><div key={`${brand}-overview-${plan.id||rowIndex}`} role="button" tabIndex={0} aria-label={`打开 ${plan.title} 编导脚本`} onClick={()=>openPlanScript(plan)} onKeyDown={event=>{if(event.key==='Enter'||event.key===' '){event.preventDefault();openPlanScript(plan)}}} className="grid cursor-pointer grid-cols-[60px_minmax(0,1fr)_72px] items-center gap-3 px-5 py-4 transition hover:bg-[#fbfdf9] sm:grid-cols-[74px_166px_minmax(0,1fr)_76px_72px] sm:px-6"><span className={`text-sm font-semibold ${plan.date?'text-slate-600':'text-amber-600'}`}>{planDate(plan.date)}</span><span className="hidden min-w-0 sm:block"><span className="inline-flex max-w-full truncate rounded-lg border border-[#dcebd6] bg-[#f1f8ed] px-2.5 py-1.5 text-xs font-semibold text-[#4f8248]">{plan.summary||'视频计划'}</span></span><button onClick={event=>{event.stopPropagation();openPlanScript(plan)}} className="min-w-0 text-left"><b className="block text-base font-semibold leading-7 text-slate-900 sm:line-clamp-2">{plan.title}</b><small className="mt-2 inline-flex max-w-full rounded-lg border border-[#dcebd6] bg-[#f1f8ed] px-2.5 py-1.5 text-xs font-semibold text-[#4f8248] sm:hidden">类型 · {plan.summary||'视频计划'}</small><small className="mt-1 block text-sm text-slate-500 sm:hidden">状态 · {planStatus(plan)}</small></button><span className="hidden items-center gap-1 text-sm text-slate-500 sm:flex"><CircleDashed size={14}/>{planStatus(plan)}</span><span className="flex justify-end gap-1"><button onClick={event=>{event.stopPropagation();openPlanScript(plan)}} aria-label={`打开 ${plan.title} 编导脚本`} title="打开脚本" className="grid size-8 place-items-center rounded-xl text-[#5e9950] transition hover:bg-white"><FileText size={16}/></button><button onClick={event=>{event.stopPropagation();setPendingDeletePlan(plan)}} aria-label={`删除计划 ${plan.title}`} className="grid size-8 place-items-center rounded-xl text-slate-400 transition hover:bg-rose-50 hover:text-rose-500"><Trash2 size={16}/></button></span></div>)}</div></>:<div className="p-8 text-center"><span className="mx-auto grid size-12 place-items-center rounded-2xl bg-slate-50 text-slate-300"><CalendarDays size={20}/></span><p className="mt-3 text-base font-medium text-slate-500">还没有视频计划</p><p className="mt-1 text-sm text-slate-500">点击上方“新建计划”开始安排</p></div>}
+      {rows.length?<><div className="hidden grid-cols-[74px_166px_minmax(0,1fr)_96px_72px] gap-3 border-b border-slate-100 bg-[#fbfcfa] px-6 py-3 text-xs font-semibold text-slate-500 sm:grid"><span>时间</span><span>类型 / 栏目</span><span>视频重点</span><span>状态</span><span className="text-right">操作</span></div><div className="divide-y divide-slate-100">{rows.map((plan,rowIndex)=><div key={`${brand}-overview-${plan.id||rowIndex}`} role="button" tabIndex={0} aria-label={`打开 ${plan.title} 编导脚本`} onClick={()=>openPlanScript(plan)} onKeyDown={event=>{if(event.key==='Enter'||event.key===' '){event.preventDefault();openPlanScript(plan)}}} className="grid cursor-pointer grid-cols-[60px_minmax(0,1fr)_72px] items-center gap-3 px-5 py-4 transition hover:bg-[#fbfdf9] sm:grid-cols-[74px_166px_minmax(0,1fr)_96px_72px] sm:px-6"><span className={`text-sm font-semibold ${plan.date?'text-slate-600':'text-amber-600'}`}>{planDate(plan.date)}</span><span className="hidden min-w-0 sm:block"><span className="inline-flex max-w-full truncate rounded-lg border border-[#dcebd6] bg-[#f1f8ed] px-2.5 py-1.5 text-xs font-semibold text-[#4f8248]">{plan.summary||'视频计划'}</span></span><button onClick={event=>{event.stopPropagation();openPlanScript(plan)}} className="min-w-0 text-left"><b className="block text-base font-semibold leading-7 text-slate-900 sm:line-clamp-2">{plan.title}</b><small className="mt-2 inline-flex max-w-full rounded-lg border border-[#dcebd6] bg-[#f1f8ed] px-2.5 py-1.5 text-xs font-semibold text-[#4f8248] sm:hidden">类型 · {plan.summary||'视频计划'}</small><small className="mt-1 block text-sm text-slate-500 sm:hidden">状态 · {planStatus(plan)}</small></button><span className="hidden sm:block">{statusSelect(plan,true)}</span><span className="flex justify-end gap-1"><button onClick={event=>{event.stopPropagation();openPlanScript(plan)}} aria-label={`打开 ${plan.title} 编导脚本`} title="打开脚本" className="grid size-8 place-items-center rounded-xl text-[#5e9950] transition hover:bg-white"><FileText size={16}/></button><button onClick={event=>{event.stopPropagation();setPendingDeletePlan(plan)}} aria-label={`删除计划 ${plan.title}`} className="grid size-8 place-items-center rounded-xl text-slate-400 transition hover:bg-rose-50 hover:text-rose-500"><Trash2 size={16}/></button></span></div>)}</div></>:<div className="p-8 text-center"><span className="mx-auto grid size-12 place-items-center rounded-2xl bg-slate-50 text-slate-300"><CalendarDays size={20}/></span><p className="mt-3 text-base font-medium text-slate-500">还没有视频计划</p><p className="mt-1 text-sm text-slate-500">点击上方“新建计划”开始安排</p></div>}
       <div className={`flex items-center justify-between border-t px-5 py-4 text-sm sm:px-6 ${isChuangyi?'border-[#e1eddd] bg-[#fafcf9]':'border-[#deeeec] bg-[#f9fcfb]'}`}><span className="text-slate-500">固定日期 {rows.filter(plan=>plan.date).length} 条</span><span className="font-medium text-amber-600">待定 {rows.filter(plan=>!plan.date).length} 条</span></div>
     </Card>
   }
@@ -562,7 +592,7 @@ function WorkPlan(){
     {plansError&&<div className="mb-4 rounded-2xl border border-rose-100 bg-rose-50 px-5 py-4 text-sm text-rose-600">{plansError}</div>}
     <AnimatePresence mode="wait">
       {planView==='month'?<motion.div key="month" variants={gridMotion} initial="hidden" animate="show" exit={{opacity:0,y:-8}}>
-        <div className="mb-6 grid gap-4 sm:grid-cols-3"><Card className="p-5"><p className="text-sm font-medium text-slate-500">视频制作数量</p><div className="mt-3 flex items-end justify-between"><strong className="text-3xl">{activePlans.length}条</strong><span className="text-sm text-slate-500">创艺 {brandPlans('创艺装饰').length} · 喜客喜 {brandPlans('喜客喜装饰').length}</span></div></Card><Card className="p-5"><p className="text-sm font-medium text-slate-500">固定发布日期</p><div className="mt-3 flex items-end justify-between"><strong className="text-3xl">{activePlans.filter(plan=>plan.date).length}条</strong><span className="text-sm text-slate-500">创艺 {brandPlans('创艺装饰').filter(plan=>plan.date).length} · 喜客喜 {brandPlans('喜客喜装饰').filter(plan=>plan.date).length}</span></div></Card><Card className="p-5"><p className="text-sm font-medium text-slate-500">待定发布日期</p><div className="mt-3 flex items-end justify-between"><strong className="text-3xl text-amber-500">{activePlans.filter(plan=>!plan.date).length}条</strong><span className="text-sm text-slate-500">创艺 {brandPlans('创艺装饰').filter(plan=>!plan.date).length} · 喜客喜 {brandPlans('喜客喜装饰').filter(plan=>!plan.date).length}</span></div></Card></div>
+        <div className="mb-6 grid gap-4 sm:grid-cols-2 xl:grid-cols-4"><Card className="p-5"><p className="text-sm font-medium text-slate-500">视频制作数量</p><div className="mt-3 flex items-end justify-between"><strong className="text-3xl">{activePlans.length}条</strong><span className="text-sm text-slate-500">创艺 {brandPlans('创艺装饰').length} · 喜客喜 {brandPlans('喜客喜装饰').length}</span></div></Card><Card className="p-5"><p className="text-sm font-medium text-slate-500">正在制作</p><div className="mt-3 flex items-end justify-between"><strong className="text-3xl text-sky-600">{activePlans.filter(plan=>planStatus(plan)==='正在制作').length}条</strong><span className="text-sm text-slate-500">未开始 {activePlans.filter(plan=>planStatus(plan)==='未开始').length} 条</span></div></Card><Card className="p-5"><p className="text-sm font-medium text-slate-500">已完成视频</p><div className="mt-3 flex items-end justify-between"><strong className="text-3xl text-emerald-600">{activePlans.filter(plan=>planStatus(plan)==='已完成').length}条</strong><span className="text-sm text-slate-500">完成率 {activePlans.length?Math.round(activePlans.filter(plan=>planStatus(plan)==='已完成').length/activePlans.length*100):0}%</span></div></Card><Card className="p-5"><p className="text-sm font-medium text-slate-500">发布日期</p><div className="mt-3 flex items-end justify-between"><strong className="text-3xl">{activePlans.filter(plan=>plan.date).length}条</strong><span className="text-sm text-amber-600">待定 {activePlans.filter(plan=>!plan.date).length} 条</span></div></Card></div>
         {['创艺装饰','喜客喜装饰'].map((brand,index)=><section key={brand} className="mb-7"><div className="mb-4 flex items-center gap-3"><span className={`grid size-9 place-items-center rounded-2xl text-sm font-black ${index===0?'bg-[#dff2d6] text-[#4f8248]':'bg-[#e4f4f2] text-[#43827d]'}`}>{index===0?'创':'喜'}</span><div><h2 className="text-lg font-semibold">{brand}</h2><p className="text-sm text-slate-500">{brandPlans(brand).length}条视频 · {brandPlans(brand).filter(plan=>plan.date).length}条已定日期</p></div></div>{brandPlans(brand).length?<div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">{brandPlans(brand).map(planCard)}</div>:<div className="rounded-3xl border border-dashed border-slate-200 bg-white/50 p-8 text-center text-sm text-slate-400">该品牌本月暂时没有计划</div>}</section>)}
         {overallPanel}
       </motion.div>:<motion.div key="week" variants={gridMotion} initial="hidden" animate="show" exit={{opacity:0,y:-8}} className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">{weekGroups.map(([name,items],index)=><Card key={name} className="min-h-[430px] bg-white/75 p-4"><div className="flex items-center justify-between px-1 py-2"><h2 className="flex items-center gap-2 font-semibold"><i className={`size-2 rounded-full ${index===0?'bg-slate-300':index===1?'bg-sky-400':index===2?'bg-amber-400':'bg-[#8dcc65]'}`}/>{name}</h2><span className="rounded-full bg-[#f2f6ef] px-2 py-1 text-xs text-slate-500">{items.length}</span></div><div className="mt-3 space-y-3">{items.map((item,i)=><motion.article whileHover={{y:-3}} key={item} className="rounded-2xl border border-slate-100 bg-white p-4 shadow-sm"><span className="text-xs font-semibold text-[#67a756]">{i%2?'内容运营':'品牌项目'}</span><h3 className="mt-2 text-base font-semibold leading-7">{item}</h3><div className="mt-5 flex items-center justify-between text-sm text-slate-500"><span className="grid size-7 place-items-center rounded-full bg-[#e5f3dd] font-bold text-[#5d8d52]">{i%2?'文':'设'}</span><time>本周{index+i+1}日</time></div></motion.article>)}</div></Card>)}</motion.div>}
